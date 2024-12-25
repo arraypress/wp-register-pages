@@ -1,0 +1,50 @@
+{
+  "name": "arraypress/wp-register-pages",
+  "version": "1.0.0",
+  "description": "A streamlined WordPress page registration system with versioning, templates, and advanced features",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "homepage": "https://github.com/arraypress/wp-register-pages/",
+  "authors": [
+    {
+      "name": "David Sherlock",
+      "homepage": "https://arraypress.com/"
+    }
+  ],
+  "require": {
+    "php": ">=7.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "ArrayPress\\WP\\": "src/"
+    },
+    "files": [
+      "src/Utilities.php"
+    ]
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true,
+    "preferred-install": "dist"
+  },
+  "minimum-stability": "stable",
+  "support": {
+    "issues": "https://github.com/arraypress/wp-register-pages/issues",
+    "source": "https://github.com/arraypress/wp-register-pages"
+  },
+  "keywords": [
+    "wordpress",
+    "pages",
+    "registration",
+    "templates",
+    "versioning",
+    "page-management",
+    "backup",
+    "restore",
+    "wp-admin",
+    "post-types",
+    "meta",
+    "relationships",
+    "hierarchy"
+  ]
+}
