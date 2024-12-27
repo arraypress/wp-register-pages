@@ -1,4 +1,4 @@
-# WordPress Page Registration Manager
+# WordPress Custom Page Registration Manager
 
 A comprehensive PHP library for managing WordPress pages with versioning, templates, and advanced features. This library provides a robust solution for programmatically creating, updating, and managing pages in WordPress.
 
@@ -18,14 +18,14 @@ A comprehensive PHP library for managing WordPress pages with versioning, templa
 ## Requirements
 
 - PHP 7.4 or higher
-- WordPress 5.0 or higher
+- WordPress 6.7.1 or higher
 
 ## Installation
 
 You can install the package via composer:
 
 ```bash
-composer require arraypress/wp-register-pages
+composer require arraypress/wp-register-custom-pages
 ```
 
 ## Basic Usage
@@ -33,10 +33,10 @@ composer require arraypress/wp-register-pages
 Here's a simple example of how to register pages:
 
 ```php
-use ArrayPress\WP\RegisterPages;
+use ArrayPress\WP\Register\CustomPages;
 
 // Initialize the page manager
-$manager = new RegisterPages( 'my_plugin', [
+$manager = new CustomPages( 'my_plugin', [
 	'version' => '1.0.0',
 	'debug'   => true
 ] );
@@ -184,4 +184,4 @@ Developed and maintained by ArrayPress Limited.
 
 ## Support
 
-For support, please use the [issue tracker](https://github.com/arraypress/wp-register-pages/issues).
+For support, please use the [issue tracker](https://github.com/arraypress/wp-register-custom-pages/issues).

@@ -41,7 +41,7 @@
 
 declare( strict_types=1 );
 
-use ArrayPress\WP\RegisterPages;
+use ArrayPress\Register\CustomPages;
 
 if ( ! function_exists( 'register_custom_pages' ) ) {
 	/**
@@ -54,7 +54,7 @@ if ( ! function_exists( 'register_custom_pages' ) ) {
 	 * @return array Array of page IDs
 	 */
 	function register_custom_pages( array $pages, string $option_prefix = '', array $config = [] ): array {
-		$manager = new RegisterPages( $option_prefix, $config );
+		$manager = new CustomPages( $option_prefix, $config );
 
 		return $manager->register( $pages )->install();
 	}

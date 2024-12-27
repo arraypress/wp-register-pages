@@ -20,7 +20,7 @@
 
 declare( strict_types=1 );
 
-namespace ArrayPress\WP;
+namespace ArrayPress\Register;
 
 use InvalidArgumentException;
 use WP_Post;
@@ -28,12 +28,12 @@ use WP_Post;
 /**
  * Class RegisterPages
  */
-class RegisterPages {
+class CustomPages {
 
 	/**
 	 * Library version
 	 */
-	private const VERSION = '2.0.0';
+	private const VERSION = '1.0.0';
 
 	/**
 	 * Default page settings
