@@ -1,173 +1,149 @@
-# WordPress Custom Page Registration Manager
+# WordPress Page Registration Library
 
-A comprehensive PHP library for managing WordPress pages with versioning, templates, and advanced features. This library provides a robust solution for programmatically creating, updating, and managing pages in WordPress.
+A comprehensive PHP library for registering and managing WordPress pages programmatically. This library provides a robust solution for creating, managing, and maintaining WordPress pages with version tracking and template support.
 
 ## Features
 
 - 🚀 Automatic page creation and verification
-- 🔄 Version tracking and updates
-- 📝 Template support with placeholder replacements
-- 🎯 Parent-child page relationships
-- 🏷️ Metadata management
-- 📊 Menu position management
-- 🔧 Installation state tracking
-- 🛠️ Debug logging
-- 💾 Backup and restore functionality
-- ✅ Key validation and sanitization
+- 📝 Template support for reusable page layouts
+- 🔄 Version tracking with meta storage
+- 👨‍👧‍👦 Parent-child page relationships
+- 🛠️ Simple utility functions for quick implementation
+- ✅ Comprehensive error handling
+- 🔍 Debug logging support
 
 ## Requirements
 
 - PHP 7.4 or higher
-- WordPress 6.7.1 or higher
+- WordPress 5.0 or higher
 
 ## Installation
 
 You can install the package via composer:
 
 ```bash
-composer require arraypress/wp-register-custom-pages
+composer require arraypress/wp-register-pages
 ```
 
 ## Basic Usage
 
-Here's a simple example of how to register pages:
+Here's a simple example of registering pages:
 
 ```php
-use ArrayPress\WP\Register\CustomPages;
-
-// Initialize the page manager
-$manager = new CustomPages( 'my_plugin', [
-	'version' => '1.0.0',
-	'debug'   => true
-] );
-
 // Define your pages
 $pages = [
-	'about'   => [
-		'title'   => 'About Us',
-		'content' => '<!-- wp:paragraph -->Welcome to our company<!-- /wp:paragraph -->',
-		'status'  => 'publish'
-	],
-	'contact' => [
-		'title'   => 'Contact Us',
-		'content' => '<!-- wp:paragraph -->Get in touch<!-- /wp:paragraph -->',
-		'parent'  => 'about' // Reference parent by key
-	]
+    'contact' => [
+        'title'   => 'Contact Us',
+        'content' => 'Contact page content here...',
+        'status'  => 'publish'
+    ],
+    'about' => [
+        'title'   => 'About Us',
+        'content' => 'About page content...',
+        'parent'  => 'contact'  // Reference to another page key
+    ]
 ];
 
-// Register and install pages
-$page_ids = $manager->register( $pages )->install();
+// Register pages with a prefix
+$page_ids = register_pages($pages, 'my_plugin');
+
+// Get page URLs
+$contact_url = get_registered_page_url('contact', 'my_plugin');
+$about_url = get_registered_page_url('about', 'my_plugin');
 ```
 
-## Advanced Usage
+## Using Templates
 
-### Working with Templates
-
-```php
-// Add a reusable template
-$manager->add_template( 'service', [
-	'title'   => 'Service: {{name}}',
-	'content' => '<!-- wp:paragraph -->{{description}}<!-- /wp:paragraph -->',
-	'status'  => 'publish'
-] );
-
-// Create a page using the template
-$manager->add_page_from_template( 'service-web', 'service', [
-	'{{name}}'        => 'Web Development',
-	'{{description}}' => 'Professional web development services'
-] );
-```
-
-### Managing Page Metadata
+You can create reusable page templates:
 
 ```php
-// Add metadata to a page
-$manager->add_page_meta( 'about', '_custom_header', 'modern' );
-```
+use ArrayPress\WP\Register\Pages;
 
-### Setting Menu Positions
+$pages = Pages::instance();
 
-```php
-// Arrange pages in menu
-$manager->set_menu_positions( [
-	'about'   => 1,
-	'contact' => 2
-] );
-```
+// Add a template
+$pages->add_template('basic_page', [
+    'title'   => '%title%',
+    'content' => '<h1>%heading%</h1><div>%content%</div>'
+]);
 
-### Backup and Restore
+// Create page from template
+$pages->add_page_from_template('new-page', 'basic_page', [
+    '%title%'   => 'New Page',
+    '%heading%' => 'Welcome!',
+    '%content%' => 'This is the page content.'
+]);
 
-```php
-// Create a backup before making changes
-$backup = $manager->backup_pages();
-
-// Make your changes
-$manager->update_pages();
-
-// Restore if needed
-if ( $something_went_wrong ) {
-	$manager->restore_from_backup();
-}
+// Install pages
+$pages->install();
 ```
 
 ## Configuration Options
 
-The RegisterPages constructor accepts two parameters:
+Each page can be configured with:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| title | string | Page title (required) |
+| content | string | Page content (required) |
+| status | string | Page status (default: 'publish') |
+| parent | string/int | Parent page ID or key |
+| menu_order | int | Menu order for the page |
+| author | int | Page author ID |
+
+## Utility Functions
+
+Global helper functions for easy access:
 
 ```php
-new RegisterPages( string $option_prefix, array $config );
+// Register pages
+register_pages($pages, 'prefix');
+
+// Get page ID
+$page_id = get_registered_page_id('page-key', 'prefix');
+
+// Get page URL
+$page_url = get_registered_page_url('page-key', 'prefix');
 ```
-
-### Available Configuration Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| version | string | '2.0.0' | Version for tracking updates |
-| debug | boolean | WP_DEBUG | Enable debug logging |
-| option_key | string | {prefix}_pages | Option key for storage |
-| defaults | array | [...] | Default page attributes |
-
-### Default Page Attributes
-
-| Attribute | Type | Default | Description |
-|-----------|------|---------|-------------|
-| status | string | 'publish' | Post status |
-| type | string | 'page' | Post type |
-| author | int | current_user_id | Page author ID |
-| comment_status | string | 'closed' | Comment status |
-| ping_status | string | 'closed' | Ping status |
-| parent | int/string | 0 | Parent page ID or key |
-| menu_order | int | 0 | Menu position |
 
 ## Error Handling
 
-The library uses exceptions for error handling:
+The library uses WordPress's WP_Error for error handling:
 
 ```php
-try {
-	$manager->add_page( 'invalid-key!', [
-		'title'   => 'Test Page',
-		'content' => 'Test content'
-	] );
-} catch ( InvalidArgumentException $e ) {
-	// Handle invalid key error
-	error_log( $e->getMessage() );
+use ArrayPress\WP\Register\Pages;
+
+$pages = Pages::instance();
+$result = $pages->add_page('invalid!key', [
+    'title'   => 'Test Page',
+    'content' => 'Content'
+]);
+
+if (is_wp_error($result)) {
+    error_log($result->get_error_message());
 }
 ```
 
-## Upgrading Pages
+## Version Management
 
-The library automatically handles version changes:
+Pages are tracked individually with version meta:
 
 ```php
-// Pages will automatically backup and reinstall when version changes
-$manager = new RegisterPages( 'my_plugin', [
-	'version' => '2.0.0' // Version change triggers update
-] );
+// Version is stored in post meta as '_page_version'
+// Configuration is stored as '_page_config'
+// Updates are handled automatically during installation
+```
 
-// Force reinstallation if needed
-$manager->reset_installation();
-$manager->install();
+## Debug Mode
+
+Debug logging is enabled when WP_DEBUG is true:
+
+```php
+// Logs will include:
+// - Page creation
+// - Updates
+// - Errors
+// - Version changes
 ```
 
 ## Contributing
@@ -184,4 +160,4 @@ Developed and maintained by ArrayPress Limited.
 
 ## Support
 
-For support, please use the [issue tracker](https://github.com/arraypress/wp-register-custom-pages/issues).
+For support, please use the [issue tracker](https://github.com/arraypress/wp-register-pages/issues).
