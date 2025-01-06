@@ -16,7 +16,7 @@
   },
   "autoload": {
     "psr-4": {
-      "ArrayPress\\Register\\": "src/"
+      "ArrayPress\\WP\\Register\\": "src/"
     },
     "files": [
       "src/Utilities.php"
@@ -27,7 +27,8 @@
     "sort-packages": true,
     "preferred-install": "dist"
   },
-  "minimum-stability": "stable",
+  "minimum-stability": "dev",
+  "prefer-stable": true,
   "support": {
     "issues": "https://github.com/arraypress/wp-register-pages/issues",
     "source": "https://github.com/arraypress/wp-register-pages"

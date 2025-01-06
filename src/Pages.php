@@ -68,7 +68,7 @@ class Pages {
 	];
 
 	/**
-	 * Collection of pages to be registered
+	 * Collection of pages to be add_pagesed
 	 *
 	 * @since 1.0.0
 	 * @var array
@@ -141,17 +141,17 @@ class Pages {
 	/**
 	 * Register multiple pages
 	 *
-	 * @param array $pages Array of pages to register
+	 * @param array $pages Array of pages to add_pages
 	 *
 	 * @return self
 	 * @since 1.0.0
 	 *
 	 */
-	public function register( array $pages ): self {
+	public function add_pages( array $pages ): self {
 		foreach ( $pages as $key => $page ) {
 			$result = $this->add_page( $key, $page );
 			if ( is_wp_error( $result ) ) {
-				$this->log( sprintf( 'Failed to register page %s: %s', $key, $result->get_error_message() ) );
+				$this->log( sprintf( 'Failed to add_pages page %s: %s', $key, $result->get_error_message() ) );
 			}
 		}
 
@@ -236,7 +236,7 @@ class Pages {
 	}
 
 	/**
-	 * Install registered pages
+	 * Install add_pagesed pages
 	 *
 	 * @return array Array of page IDs keyed by their identifiers
 	 * @since 1.0.0
@@ -482,10 +482,10 @@ class Pages {
 	 * @since 1.0.0
 	 *
 	 */
-	public static function create_pages( array $pages, string $prefix = '' ): array {
+	public static function register( array $pages, string $prefix = '' ): array {
 		return self::instance()
 		           ->set_prefix( $prefix )
-		           ->register( $pages )
+		           ->add_pages( $pages )
 		           ->install();
 	}
 

@@ -33,7 +33,7 @@ if ( ! function_exists( 'register_pages' ) ):
 	 * ];
 	 *
 	 * // Register pages with a prefix
-	 * $page_ids = register_pages($pages, 'my_plugin');
+	 * $page_ids = register_pages( $pages, 'my_plugin' );
 	 * ```
 	 *
 	 * @since 1.0.0
@@ -44,7 +44,7 @@ if ( ! function_exists( 'register_pages' ) ):
 	 * @return array Array of registered page IDs
 	 */
 	function register_pages( array $pages, string $prefix = '' ): array {
-		return Pages::create_pages( $pages, $prefix );
+		return Pages::register( $pages, $prefix );
 	}
 endif;
 
