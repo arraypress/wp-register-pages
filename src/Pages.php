@@ -347,14 +347,17 @@ class Pages {
 			foreach ( array_keys( $this->pages ) as $key ) {
 				$page_id = call_user_func( $this->get_handler, $key . '_page' );
 				if ( $page_id ) {
-					$pages[ $key ] = $page_id;
+					$pages[ $key ] = (int) $page_id;  // Cast to integer
 				}
 			}
 
 			return $pages;
 		}
 
-		return get_option( $this->get_option_key( 'pages' ), [] );
+		$stored = get_option( $this->get_option_key( 'pages' ), [] );
+
+		// Cast all stored IDs to integers
+		return array_map( 'intval', $stored );
 	}
 
 	/**
@@ -365,13 +368,16 @@ class Pages {
 	 * @return bool True on success, false on failure
 	 */
 	protected function save_page_ids( array $page_ids ): bool {
+		// Ensure all IDs are integers before saving
+		$page_ids = array_map( 'intval', $page_ids );
+
 		if ( $this->update_handler ) {
 			$results = [];
 			foreach ( $page_ids as $key => $page_id ) {
 				$results[] = (bool) call_user_func(
 					$this->update_handler,
 					$key . '_page',
-					$page_id
+					(int) $page_id  // Cast to integer
 				);
 			}
 
@@ -532,7 +538,7 @@ class Pages {
 			[]
 		);
 
-		return $stored[ $key ] ?? null;
+		return isset( $stored[ $key ] ) ? (int) $stored[ $key ] : null;
 	}
 
 	/**
