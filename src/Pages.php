@@ -261,7 +261,9 @@ class Pages {
 	 * @return bool True on success, false on failure
 	 */
 	protected function store_page_config( int $page_id, array $attributes ): bool {
-		return update_post_meta( $page_id, '_page_config', $attributes );
+		$result = update_post_meta( $page_id, '_page_config', $attributes );
+
+		return $result !== false;
 	}
 
 	/**
