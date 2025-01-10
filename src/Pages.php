@@ -35,7 +35,6 @@ use WP_Post;
  * @since   1.0.0
  */
 class Pages {
-
 	/**
 	 * Library version
 	 *
@@ -101,13 +100,19 @@ class Pages {
 	private bool $debug = false;
 
 	/**
+	 * Installation state keys
+	 *
+	 * @var string
+	 */
+	private string $install_key = 'pages_installed';
+	private string $version_key = 'pages_version';
+
+	/**
 	 * Constructor
 	 *
 	 * @param string        $prefix         Optional. Option prefix for storing page data
 	 * @param callable|null $get_handler    Optional. Custom handler for getting options
 	 * @param callable|null $update_handler Optional. Custom handler for updating options
-	 *
-
 	 */
 	public function __construct( string $prefix = '', ?callable $get_handler = null, ?callable $update_handler = null ) {
 		$this->option_prefix  = $prefix;
@@ -206,11 +211,52 @@ class Pages {
 	}
 
 	/**
+	 * Check if pages are already installed
+	 *
+	 * @return bool
+	 */
+	protected function is_installed(): bool {
+		if ( $this->get_handler ) {
+			$installed = call_user_func( $this->get_handler, $this->install_key );
+			$version   = call_user_func( $this->get_handler, $this->version_key );
+
+			return $installed && version_compare( $version, self::VERSION, '>=' );
+		}
+
+		$installed = get_option( $this->get_option_key( $this->install_key ) );
+		$version   = get_option( $this->get_option_key( $this->version_key ) );
+
+		return $installed && version_compare( $version, self::VERSION, '>=' );
+	}
+
+	/**
+	 * Mark installation as complete
+	 *
+	 * @return bool
+	 */
+	protected function mark_as_installed(): bool {
+		if ( $this->update_handler ) {
+			$result1 = call_user_func( $this->update_handler, $this->install_key, true );
+			$result2 = call_user_func( $this->update_handler, $this->version_key, self::VERSION );
+
+			return $result1 && $result2;
+		}
+
+		return update_option( $this->get_option_key( $this->install_key ), true ) &&
+		       update_option( $this->get_option_key( $this->version_key ), self::VERSION );
+	}
+
+	/**
 	 * Install registered pages
 	 *
 	 * @return array Array of page IDs keyed by their identifiers
 	 */
 	public function install(): array {
+		// Check if already installed with current version
+		if ( $this->is_installed() ) {
+			return $this->get_stored_pages();
+		}
+
 		$page_ids = [];
 		$stored   = $this->get_stored_pages();
 
@@ -234,6 +280,7 @@ class Pages {
 
 		if ( ! empty( $page_ids ) ) {
 			$this->save_page_ids( $page_ids );
+			$this->mark_as_installed();
 		}
 
 		return $page_ids;
@@ -298,8 +345,7 @@ class Pages {
 		if ( $this->get_handler ) {
 			$pages = [];
 			foreach ( array_keys( $this->pages ) as $key ) {
-				$option_key = $this->get_option_key( $key . '_page' );
-				$page_id    = call_user_func( $this->get_handler, $option_key );
+				$page_id = call_user_func( $this->get_handler, $key . '_page' );
 				if ( $page_id ) {
 					$pages[ $key ] = $page_id;
 				}
@@ -308,9 +354,7 @@ class Pages {
 			return $pages;
 		}
 
-		$option_key = $this->get_option_key( 'pages' );
-
-		return get_option( $option_key, [] );
+		return get_option( $this->get_option_key( 'pages' ), [] );
 	}
 
 	/**
@@ -322,20 +366,19 @@ class Pages {
 	 */
 	protected function save_page_ids( array $page_ids ): bool {
 		if ( $this->update_handler ) {
-			// Use custom option handler for each page
 			$results = [];
 			foreach ( $page_ids as $key => $page_id ) {
-				$option_key = $this->get_option_key( $key . '_page' );
-				$results[]  = (bool) call_user_func( $this->update_handler, $option_key, $page_id );
+				$results[] = (bool) call_user_func(
+					$this->update_handler,
+					$key . '_page',
+					$page_id
+				);
 			}
 
 			return ! in_array( false, $results, true );
 		}
 
-		// Default to WordPress options if no custom handler
-		$option_key = $this->get_option_key( 'pages' );
-
-		return update_option( $option_key, $page_ids );
+		return update_option( $this->get_option_key( 'pages' ), $page_ids );
 	}
 
 	/**
@@ -343,9 +386,14 @@ class Pages {
 	 *
 	 * @param string $key Option key
 	 *
-	 * @return string Prefixed option key
+	 * @return string Option key (prefixed only if no custom handlers)
 	 */
 	protected function get_option_key( string $key ): string {
+		// Don't apply prefix if using custom handlers
+		if ( $this->get_handler || $this->update_handler ) {
+			return $key;
+		}
+
 		return empty( $this->option_prefix ) ? $key : "{$this->option_prefix}_{$key}";
 	}
 
@@ -451,7 +499,7 @@ class Pages {
 	 * Static helper method to create and install pages.
 	 *
 	 * @param array         $pages          Array of pages
-	 * @param string        $prefix         Optional. Option prefix
+	 * @param string        $prefix         Optional. Option prefix for storing page data
 	 * @param callable|null $update_handler Optional. Custom handler for updating options
 	 * @param callable|null $get_handler    Optional. Custom handler for getting options
 	 *
@@ -467,15 +515,14 @@ class Pages {
 	 * Static helper method to get a page ID by its key
 	 *
 	 * @param string        $key         Page key
-	 * @param string        $prefix      Optional. Option prefix
+	 * @param string        $prefix      Optional. Option prefix used during registration
 	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return int|null Page ID if found, null otherwise
 	 */
 	public static function get_page_id( string $key, string $prefix = '', ?callable $get_handler = null ): ?int {
 		if ( $get_handler ) {
-			$option_key = empty( $prefix ) ? "{$key}_page" : "{$prefix}_{$key}_page";
-			$page_id    = call_user_func( $get_handler, $option_key );
+			$page_id = call_user_func( $get_handler, $key . '_page' );
 
 			return $page_id ? (int) $page_id : null;
 		}
@@ -492,7 +539,7 @@ class Pages {
 	 * Static helper method to get a page URL by its key
 	 *
 	 * @param string        $key         Page key
-	 * @param string        $prefix      Optional. Option prefix
+	 * @param string        $prefix      Optional. Option prefix used during registration
 	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return string|null Page URL if found, null otherwise
