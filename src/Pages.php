@@ -9,6 +9,7 @@
  * - Parent-child relationships
  * - Installation state tracking
  * - Error handling
+ * - Custom option storage support
  *
  * @package     ArrayPress\WP\Register
  * @copyright   Copyright (c) 2024, ArrayPress Limited
@@ -36,17 +37,8 @@ use WP_Post;
 class Pages {
 
 	/**
-	 * Instance of this class.
-	 *
-	 * @since 1.0.0
-	 * @var self|null
-	 */
-	private static ?self $instance = null;
-
-	/**
 	 * Library version
 	 *
-	 * @since 1.0.0
 	 * @var string
 	 */
 	private const VERSION = '1.0.0';
@@ -54,7 +46,6 @@ class Pages {
 	/**
 	 * Default page settings
 	 *
-	 * @since 1.0.0
 	 * @var array
 	 */
 	protected const DEFAULTS = [
@@ -68,9 +59,8 @@ class Pages {
 	];
 
 	/**
-	 * Collection of pages to be add_pagesed
+	 * Collection of pages to be registered
 	 *
-	 * @since 1.0.0
 	 * @var array
 	 */
 	private array $pages = [];
@@ -78,7 +68,6 @@ class Pages {
 	/**
 	 * Page templates
 	 *
-	 * @since 1.0.0
 	 * @var array
 	 */
 	private array $templates = [];
@@ -86,72 +75,59 @@ class Pages {
 	/**
 	 * Option prefix for storing page data
 	 *
-	 * @since 1.0.0
 	 * @var string
 	 */
 	private string $option_prefix = '';
 
 	/**
+	 * Option get handler callback
+	 *
+	 * @var callable|null
+	 */
+	private $get_handler = null;
+
+	/**
+	 * Option update handler callback
+	 *
+	 * @var callable|null
+	 */
+	private $update_handler = null;
+
+	/**
 	 * Debug mode status
 	 *
-	 * @since 1.0.0
 	 * @var bool
 	 */
 	private bool $debug = false;
 
 	/**
-	 * Get instance of this class.
-	 *
-	 * @return self Instance of this class.
-	 * @since 1.0.0
-	 *
-	 */
-	public static function instance(): self {
-		if ( null === self::$instance ) {
-			self::$instance = new self();
-		}
-
-		return self::$instance;
-	}
-
-	/**
 	 * Constructor
 	 *
-	 * @since 1.0.0
-	 */
-	private function __construct() {
-		$this->debug = defined( 'WP_DEBUG' ) && WP_DEBUG;
-	}
+	 * @param string        $prefix         Optional. Option prefix for storing page data
+	 * @param callable|null $get_handler    Optional. Custom handler for getting options
+	 * @param callable|null $update_handler Optional. Custom handler for updating options
+	 *
 
-	/**
-	 * Set the option prefix
-	 *
-	 * @param string $prefix The prefix to use for options
-	 *
-	 * @return self
-	 * @since 1.0.0
-	 *
 	 */
-	public function set_prefix( string $prefix ): self {
-		$this->option_prefix = $prefix;
-
-		return $this;
+	public function __construct( string $prefix = '', ?callable $get_handler = null, ?callable $update_handler = null ) {
+		$this->option_prefix  = $prefix;
+		$this->get_handler    = $get_handler;
+		$this->update_handler = $update_handler;
+		$this->debug          = defined( 'WP_DEBUG' ) && WP_DEBUG;
 	}
 
 	/**
 	 * Register multiple pages
 	 *
-	 * @param array $pages Array of pages to add_pages
+	 * @param array $pages Array of pages to register
 	 *
 	 * @return self
-	 * @since 1.0.0
-	 *
 	 */
 	public function add_pages( array $pages ): self {
 		foreach ( $pages as $key => $page ) {
 			$result = $this->add_page( $key, $page );
 			if ( is_wp_error( $result ) ) {
-				$this->log( sprintf( 'Failed to add_pages page %s: %s', $key, $result->get_error_message() ) );
+				$this->log( sprintf( 'Failed to register page %s: %s', $key, $result->get_error_message() ) );
 			}
 		}
 
@@ -165,8 +141,6 @@ class Pages {
 	 * @param array  $page Page configuration
 	 *
 	 * @return true|WP_Error True on success, WP_Error on failure
-	 * @since 1.0.0
-	 *
 	 */
 	public function add_page( string $key, array $page ) {
 		if ( ! $this->is_valid_key( $key ) ) {
@@ -196,8 +170,6 @@ class Pages {
 	 * @param array  $template Template configuration
 	 *
 	 * @return self
-	 * @since 1.0.0
-	 *
 	 */
 	public function add_template( string $name, array $template ): self {
 		$this->templates[ $name ] = $template;
@@ -213,8 +185,6 @@ class Pages {
 	 * @param array  $replacements Optional. Placeholder replacements
 	 *
 	 * @return true|WP_Error True on success, WP_Error on failure
-	 * @since 1.0.0
-	 *
 	 */
 	public function add_page_from_template( string $key, string $template, array $replacements = [] ) {
 		if ( ! isset( $this->templates[ $template ] ) ) {
@@ -236,11 +206,9 @@ class Pages {
 	}
 
 	/**
-	 * Install add_pagesed pages
+	 * Install registered pages
 	 *
 	 * @return array Array of page IDs keyed by their identifiers
-	 * @since 1.0.0
-	 *
 	 */
 	public function install(): array {
 		$page_ids = [];
@@ -277,8 +245,6 @@ class Pages {
 	 * @param int $page_id Page ID
 	 *
 	 * @return bool True on success, false on failure
-	 * @since 1.0.0
-	 *
 	 */
 	protected function set_page_version( int $page_id ): bool {
 		return update_post_meta( $page_id, '_page_version', self::VERSION );
@@ -291,8 +257,6 @@ class Pages {
 	 * @param array $attributes Page attributes
 	 *
 	 * @return bool True on success, false on failure
-	 * @since 1.0.0
-	 *
 	 */
 	protected function store_page_config( int $page_id, array $attributes ): bool {
 		return update_post_meta( $page_id, '_page_config', $attributes );
@@ -306,8 +270,6 @@ class Pages {
 	 * @param string $key        Page identifier
 	 *
 	 * @return void
-	 * @since 1.0.0
-	 *
 	 */
 	protected function maybe_update_page( int $page_id, array $attributes, string $key ): void {
 		$current_version = get_post_meta( $page_id, '_page_version', true );
@@ -327,10 +289,21 @@ class Pages {
 	 * Get stored page IDs
 	 *
 	 * @return array Array of stored page IDs
-	 * @since 1.0.0
-	 *
 	 */
 	protected function get_stored_pages(): array {
+		if ( $this->get_handler ) {
+			$pages = [];
+			foreach ( array_keys( $this->pages ) as $key ) {
+				$option_key = $this->get_option_key( $key . '_page' );
+				$page_id    = call_user_func( $this->get_handler, $option_key );
+				if ( $page_id ) {
+					$pages[ $key ] = $page_id;
+				}
+			}
+
+			return $pages;
+		}
+
 		$option_key = $this->get_option_key( 'pages' );
 
 		return get_option( $option_key, [] );
@@ -342,10 +315,20 @@ class Pages {
 	 * @param array $page_ids Array of page IDs
 	 *
 	 * @return bool True on success, false on failure
-	 * @since 1.0.0
-	 *
 	 */
 	protected function save_page_ids( array $page_ids ): bool {
+		if ( $this->update_handler ) {
+			// Use custom option handler for each page
+			$results = [];
+			foreach ( $page_ids as $key => $page_id ) {
+				$option_key = $this->get_option_key( $key . '_page' );
+				$results[]  = (bool) call_user_func( $this->update_handler, $option_key, $page_id );
+			}
+
+			return ! in_array( false, $results, true );
+		}
+
+		// Default to WordPress options if no custom handler
 		$option_key = $this->get_option_key( 'pages' );
 
 		return update_option( $option_key, $page_ids );
@@ -357,8 +340,6 @@ class Pages {
 	 * @param string $key Option key
 	 *
 	 * @return string Prefixed option key
-	 * @since 1.0.0
-	 *
 	 */
 	protected function get_option_key( string $key ): string {
 		return empty( $this->option_prefix ) ? $key : "{$this->option_prefix}_{$key}";
@@ -370,8 +351,6 @@ class Pages {
 	 * @param array $page Page configuration
 	 *
 	 * @return true|WP_Error True if valid, WP_Error if invalid
-	 * @since 1.0.0
-	 *
 	 */
 	protected function validate_page( array $page ) {
 		$required = [ 'title', 'content' ];
@@ -394,8 +373,6 @@ class Pages {
 	 * @param array $page Page configuration
 	 *
 	 * @return array Prepared attributes
-	 * @since 1.0.0
-	 *
 	 */
 	protected function prepare_page_attributes( array $page ): array {
 		$mapping = [
@@ -421,8 +398,6 @@ class Pages {
 	 * Get default page attributes
 	 *
 	 * @return array Default attributes
-	 * @since 1.0.0
-	 *
 	 */
 	protected function get_default_attributes(): array {
 		$defaults = self::DEFAULTS;
@@ -443,8 +418,6 @@ class Pages {
 	 * @param string $key Page identifier
 	 *
 	 * @return bool Whether the key is valid
-	 * @since 1.0.0
-	 *
 	 */
 	protected function is_valid_key( string $key ): bool {
 		return (bool) preg_match( '/^[a-z0-9_-]+$/', $key );
@@ -457,8 +430,6 @@ class Pages {
 	 * @param array  $context Optional. Additional context
 	 *
 	 * @return void
-	 * @since 1.0.0
-	 *
 	 */
 	protected function log( string $message, array $context = [] ): void {
 		if ( $this->debug ) {
@@ -473,33 +444,38 @@ class Pages {
 	}
 
 	/**
-	 * Helper method to create and install pages.
+	 * Static helper method to create and install pages.
 	 *
-	 * @param array  $pages  Array of pages
-	 * @param string $prefix Optional. Option prefix
+	 * @param array         $pages          Array of pages
+	 * @param string        $prefix         Optional. Option prefix
+	 * @param callable|null $update_handler Optional. Custom handler for updating options
+	 * @param callable|null $get_handler    Optional. Custom handler for getting options
 	 *
 	 * @return array Array of page IDs
-	 * @since 1.0.0
-	 *
 	 */
-	public static function register( array $pages, string $prefix = '' ): array {
-		return self::instance()
-		           ->set_prefix( $prefix )
-		           ->add_pages( $pages )
-		           ->install();
+	public static function register( array $pages, string $prefix = '', ?callable $update_handler = null, ?callable $get_handler = null ): array {
+		$instance = new self( $prefix, $get_handler, $update_handler );
+
+		return $instance->add_pages( $pages )->install();
 	}
 
 	/**
-	 * Get a page ID by its key
+	 * Static helper method to get a page ID by its key
 	 *
-	 * @param string $key    Page key
-	 * @param string $prefix Optional. Option prefix
+	 * @param string        $key         Page key
+	 * @param string        $prefix      Optional. Option prefix
+	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return int|null Page ID if found, null otherwise
-	 * @since 1.0.0
-	 *
 	 */
-	public static function get_page_id( string $key, string $prefix = '' ): ?int {
+	public static function get_page_id( string $key, string $prefix = '', ?callable $get_handler = null ): ?int {
+		if ( $get_handler ) {
+			$option_key = empty( $prefix ) ? "{$key}_page" : "{$prefix}_{$key}_page";
+			$page_id    = call_user_func( $get_handler, $option_key );
+
+			return $page_id ? (int) $page_id : null;
+		}
+
 		$stored = get_option(
 			empty( $prefix ) ? 'pages' : "{$prefix}_pages",
 			[]
@@ -509,20 +485,18 @@ class Pages {
 	}
 
 	/**
-	 * Get a page URL by its key
+	 * Static helper method to get a page URL by its key
 	 *
-	 * @param string $key    Page key
-	 * @param string $prefix Optional. Option prefix
+	 * @param string        $key         Page key
+	 * @param string        $prefix      Optional. Option prefix
+	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return string|null Page URL if found, null otherwise
-	 * @since 1.0.0
-	 *
 	 */
-	public static function get_page_url( string $key, string $prefix = '' ): ?string {
-		$page_id = self::get_page_id( $key, $prefix );
+	public static function get_page_url( string $key, string $prefix = '', ?callable $get_handler = null ): ?string {
+		$page_id = self::get_page_id( $key, $prefix, $get_handler );
 
 		return $page_id ? get_permalink( $page_id ) : null;
 	}
 
 }
-

@@ -32,19 +32,33 @@ if ( ! function_exists( 'register_pages' ) ):
 	 *     ]
 	 * ];
 	 *
-	 * // Register pages with a prefix
+	 * // Register pages with WordPress options
 	 * $page_ids = register_pages( $pages, 'my_plugin' );
+	 *
+	 * // Register pages with custom option handlers (e.g., EDD)
+	 * $page_ids = register_pages(
+	 *     $pages,
+	 *     'edd_guest_downloads',
+	 *     'edd_update_option',
+	 *     'edd_get_option'
+	 * );
 	 * ```
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param array  $pages  Array of pages to register
-	 * @param string $prefix Optional. Option prefix for storing page IDs
+	 * @param array         $pages          Array of pages to register
+	 * @param string        $prefix         Optional. Option prefix for storing page IDs
+	 * @param callable|null $update_handler Optional. Custom handler for updating options
+	 * @param callable|null $get_handler    Optional. Custom handler for getting options
 	 *
 	 * @return array Array of registered page IDs
+	 *
 	 */
-	function register_pages( array $pages, string $prefix = '' ): array {
-		return Pages::register( $pages, $prefix );
+	function register_pages(
+		array $pages,
+		string $prefix = '',
+		?callable $update_handler = null,
+		?callable $get_handler = null
+	): array {
+		return Pages::register( $pages, $prefix, $update_handler, $get_handler );
 	}
 endif;
 
@@ -52,15 +66,15 @@ if ( ! function_exists( 'get_registered_page_id' ) ):
 	/**
 	 * Get a registered page ID by its key.
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $key    Page identifier
-	 * @param string $prefix Optional. Option prefix used during registration
+	 * @param string        $key         Page identifier
+	 * @param string        $prefix      Optional. Option prefix used during registration
+	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return int|null Page ID if found, null otherwise
+	 *
 	 */
-	function get_registered_page_id( string $key, string $prefix = '' ): ?int {
-		return Pages::get_page_id( $key, $prefix );
+	function get_registered_page_id( string $key, string $prefix = '', ?callable $get_handler = null ): ?int {
+		return Pages::get_page_id( $key, $prefix, $get_handler );
 	}
 endif;
 
@@ -68,14 +82,14 @@ if ( ! function_exists( 'get_registered_page_url' ) ):
 	/**
 	 * Get a registered page URL by its key.
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $key    Page identifier
-	 * @param string $prefix Optional. Option prefix used during registration
+	 * @param string        $key         Page identifier
+	 * @param string        $prefix      Optional. Option prefix used during registration
+	 * @param callable|null $get_handler Optional. Custom handler for getting options
 	 *
 	 * @return string|null Page URL if found, null otherwise
+	 *
 	 */
-	function get_registered_page_url( string $key, string $prefix = '' ): ?string {
-		return Pages::get_page_url( $key, $prefix );
+	function get_registered_page_url( string $key, string $prefix = '', ?callable $get_handler = null ): ?string {
+		return Pages::get_page_url( $key, $prefix, $get_handler );
 	}
 endif;

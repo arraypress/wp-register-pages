@@ -1,16 +1,6 @@
-# WordPress Page Registration Library
+# WordPress Page Registration Manager
 
-A comprehensive PHP library for registering and managing WordPress pages programmatically. This library provides a robust solution for creating, managing, and maintaining WordPress pages with version tracking and template support.
-
-## Features
-
-- 🚀 Automatic page creation and verification
-- 📝 Template support for reusable page layouts
-- 🔄 Version tracking with meta storage
-- 👨‍👧‍👦 Parent-child page relationships
-- 🛠️ Simple utility functions for quick implementation
-- ✅ Comprehensive error handling
-- 🔍 Debug logging support
+A comprehensive solution for managing WordPress pages programmatically. This library makes it easy to create, update, and manage pages with features like version tracking, templates, and custom storage options.
 
 ## Requirements
 
@@ -25,125 +15,186 @@ You can install the package via composer:
 composer require arraypress/wp-register-pages
 ```
 
-## Basic Usage
+## Quick Start
 
-Here's a simple example of registering pages:
+Register pages with just a few lines of code:
 
 ```php
 // Define your pages
 $pages = [
-    'contact' => [
-        'title'   => 'Contact Us',
-        'content' => 'Contact page content here...',
-        'status'  => 'publish'
-    ],
-    'about' => [
-        'title'   => 'About Us',
-        'content' => 'About page content...',
-        'parent'  => 'contact'  // Reference to another page key
-    ]
+	'contact' => [
+		'title'   => 'Contact Us',
+		'content' => 'Contact page content here...'
+	],
+	'about'   => [
+		'title'   => 'About Us',
+		'content' => 'About page content...',
+		'parent'  => 'contact'  // Will be set as child of contact page
+	]
 ];
 
-// Register pages with a prefix
-$page_ids = register_pages($pages, 'my_plugin');
+// Register pages (returns array of page IDs)
+$page_ids = register_pages( $pages, 'my_plugin' );
 
 // Get page URLs
-$contact_url = get_registered_page_url('contact', 'my_plugin');
-$about_url = get_registered_page_url('about', 'my_plugin');
+$contact_url = get_registered_page_url( 'contact', 'my_plugin' );
+$about_url   = get_registered_page_url( 'about', 'my_plugin' );
 ```
 
-## Using Templates
+## Utility Functions
 
-You can create reusable page templates:
+The library provides simple helper functions for common tasks:
+
+### Register Pages
+
+```php
+// Basic registration
+$page_ids = register_pages( $pages );
+
+// With a prefix for option storage
+$page_ids = register_pages( $pages, 'my_plugin' );
+
+// With custom option handlers (e.g., for EDD integration)
+$page_ids = register_pages(
+	$pages,
+	'edd_pages',
+	'edd_update_option',
+	'edd_get_option'
+);
+```
+
+### Get Page ID
+
+```php
+// Get a page ID by its key
+$page_id = get_registered_page_id( 'contact', 'my_plugin' );
+```
+
+### Get Page URL
+
+```php
+// Get a page URL by its key
+$page_url = get_registered_page_url( 'contact', 'my_plugin' );
+```
+
+## Page Configuration
+
+Each page can be configured with these options:
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| title | string | Page title (required) | - |
+| content | string | Page content (required) | - |
+| status | string | Publication status | 'publish' |
+| type | string | Post type | 'page' |
+| author | int | Author ID | current user |
+| comment_status | string | Comment status | 'closed' |
+| ping_status | string | Ping status | 'closed' |
+| parent | int/string | Parent page ID or key | 0 |
+| menu_order | int | Menu order | 0 |
+
+## Features
+
+- 🚀 Automatic page creation and verification
+- 📝 Template support with placeholder replacements
+- 🔄 Version tracking and management
+- 👨‍👧‍👦 Parent-child page relationships
+- 🎛️ Custom option storage support
+- ✅ Comprehensive error handling
+- 🔍 Debug mode with detailed logging
+- 🛡️ Type-safe implementation
+
+## Advanced Usage
+
+### Using the Pages Class
+
+For more advanced usage, you can use the Pages class directly:
 
 ```php
 use ArrayPress\WP\Register\Pages;
 
-$pages = Pages::instance();
+$manager = new Pages( 'my_plugin' );
 
-// Add a template
-$pages->add_template('basic_page', [
-    'title'   => '%title%',
-    'content' => '<h1>%heading%</h1><div>%content%</div>'
-]);
+// Add multiple pages
+$manager->add_pages( [
+	'privacy' => [
+		'title'   => 'Privacy Policy',
+		'content' => 'Privacy policy content...'
+	]
+] )->install();
 
-// Create page from template
-$pages->add_page_from_template('new-page', 'basic_page', [
-    '%title%'   => 'New Page',
-    '%heading%' => 'Welcome!',
-    '%content%' => 'This is the page content.'
-]);
-
-// Install pages
-$pages->install();
+// Add a single page
+$manager->add_page( 'terms', [
+	'title'   => 'Terms of Service',
+	'content' => 'Terms content...'
+] );
 ```
 
-## Configuration Options
+### Using Templates
 
-Each page can be configured with:
-
-| Option | Type | Description |
-|--------|------|-------------|
-| title | string | Page title (required) |
-| content | string | Page content (required) |
-| status | string | Page status (default: 'publish') |
-| parent | string/int | Parent page ID or key |
-| menu_order | int | Menu order for the page |
-| author | int | Page author ID |
-
-## Utility Functions
-
-Global helper functions for easy access:
+Create reusable page templates with placeholders:
 
 ```php
-// Register pages
-register_pages($pages, 'prefix');
+use ArrayPress\WP\Register\Pages;
 
-// Get page ID
-$page_id = get_registered_page_id('page-key', 'prefix');
+$manager = new Pages( 'my_plugin' );
 
-// Get page URL
-$page_url = get_registered_page_url('page-key', 'prefix');
+// Add a template
+$manager->add_template( 'basic_page', [
+	'title'   => '%title%',
+	'content' => '<h1>%heading%</h1><div>%content%</div>',
+	'status'  => 'publish'
+] );
+
+// Create a page from the template
+$manager->add_page_from_template( 'new-page', 'basic_page', [
+	'%title%'   => 'New Page',
+	'%heading%' => 'Welcome!',
+	'%content%' => 'This is the page content.'
+] );
+
+// Install all pages
+$manager->install();
 ```
 
-## Error Handling
+### Custom Option Storage
+
+For custom option handling (e.g., EDD integration):
+
+```php
+$manager = new Pages(
+	'edd_pages',
+	'edd_get_option',    // Get handler
+	'edd_update_option'  // Update handler
+);
+```
+
+### Error Handling
 
 The library uses WordPress's WP_Error for error handling:
 
 ```php
-use ArrayPress\WP\Register\Pages;
+$result = $manager->add_page( 'invalid!key', [
+	'title'   => 'Test Page',
+	'content' => 'Content'
+] );
 
-$pages = Pages::instance();
-$result = $pages->add_page('invalid!key', [
-    'title'   => 'Test Page',
-    'content' => 'Content'
-]);
-
-if (is_wp_error($result)) {
-    error_log($result->get_error_message());
+if ( is_wp_error( $result ) ) {
+	error_log( $result->get_error_message() );
 }
-```
-
-## Version Management
-
-Pages are tracked individually with version meta:
-
-```php
-// Version is stored in post meta as '_page_version'
-// Configuration is stored as '_page_config'
-// Updates are handled automatically during installation
 ```
 
 ## Debug Mode
 
-Debug logging is enabled when WP_DEBUG is true:
+Debug logging is automatically enabled when `WP_DEBUG` is true:
 
 ```php
 // Logs will include:
-// - Page creation
-// - Updates
-// - Errors
+// - Page registration events
+// - Page updates
+// - Error messages
 // - Version changes
+// - Option storage operations
 ```
 
 ## Contributing
@@ -153,10 +204,6 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 ## License
 
 This project is licensed under the GPL2+ License. See the LICENSE file for details.
-
-## Credits
-
-Developed and maintained by ArrayPress Limited.
 
 ## Support
 
