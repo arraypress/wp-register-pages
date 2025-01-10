@@ -247,7 +247,9 @@ class Pages {
 	 * @return bool True on success, false on failure
 	 */
 	protected function set_page_version( int $page_id ): bool {
-		return update_post_meta( $page_id, '_page_version', self::VERSION );
+		$result = update_post_meta( $page_id, '_page_version', self::VERSION );
+
+		return $result !== false;
 	}
 
 	/**
