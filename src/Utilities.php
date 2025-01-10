@@ -92,3 +92,28 @@ if ( ! function_exists( 'get_registered_page_url' ) ):
 		return Pages::get_page_url( $key, $prefix, $get_handler );
 	}
 endif;
+
+if ( ! function_exists( 'force_reinstall_pages' ) ):
+	/**
+	 * Force reinstallation of registered pages
+	 *
+	 * @param array         $pages          Array of pages to register
+	 * @param string        $prefix         Optional. Option prefix for storing page IDs
+	 * @param callable|null $update_handler Optional. Custom handler for updating options
+	 * @param callable|null $get_handler    Optional. Custom handler for getting options
+	 *
+	 * @return array Array of registered page IDs
+	 */
+	function force_reinstall_pages(
+		array $pages,
+		string $prefix = '',
+		?callable $update_handler = null,
+		?callable $get_handler = null
+	): array {
+		$instance = new Pages( $prefix, $get_handler, $update_handler );
+
+		return $instance->force_reinstall()
+		                ->add_pages( $pages )
+		                ->install();
+	}
+endif;

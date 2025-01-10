@@ -2,14 +2,11 @@
 /**
  * WordPress Page Registration Manager
  *
- * A comprehensive solution for managing WordPress pages with features like:
+ * A simplified solution for managing WordPress pages with features like:
  * - Automatic page creation and verification
- * - Simple version tracking
- * - Template support
  * - Parent-child relationships
- * - Installation state tracking
- * - Error handling
  * - Custom option storage support
+ * - Error handling and logging
  *
  * @package     ArrayPress\WP\Register
  * @copyright   Copyright (c) 2024, ArrayPress Limited
@@ -35,12 +32,6 @@ use WP_Post;
  * @since   1.0.0
  */
 class Pages {
-	/**
-	 * Library version
-	 *
-	 * @var string
-	 */
-	private const VERSION = '1.0.0';
 
 	/**
 	 * Default page settings
@@ -63,13 +54,6 @@ class Pages {
 	 * @var array
 	 */
 	private array $pages = [];
-
-	/**
-	 * Page templates
-	 *
-	 * @var array
-	 */
-	private array $templates = [];
 
 	/**
 	 * Option prefix for storing page data
@@ -100,12 +84,11 @@ class Pages {
 	private bool $debug = false;
 
 	/**
-	 * Installation state keys
+	 * Base flag for initialization tracking
 	 *
 	 * @var string
 	 */
-	private string $install_key = 'pages_installed';
-	private string $version_key = 'pages_version';
+	private string $installed_flag = 'pages_initialized';
 
 	/**
 	 * Constructor
@@ -114,11 +97,75 @@ class Pages {
 	 * @param callable|null $get_handler    Optional. Custom handler for getting options
 	 * @param callable|null $update_handler Optional. Custom handler for updating options
 	 */
-	public function __construct( string $prefix = '', ?callable $get_handler = null, ?callable $update_handler = null ) {
+	public function __construct(
+		string $prefix = '',
+		?callable $get_handler = null,
+		?callable $update_handler = null
+	) {
 		$this->option_prefix  = $prefix;
 		$this->get_handler    = $get_handler;
 		$this->update_handler = $update_handler;
 		$this->debug          = defined( 'WP_DEBUG' ) && WP_DEBUG;
+	}
+
+	/**
+	 * Get unique initialization key based on registered pages
+	 *
+	 * @return string
+	 */
+	private function get_initialization_key(): string {
+		$page_keys = array_keys( $this->pages );
+		sort( $page_keys ); // Ensure consistent order
+		$unique_hash = md5( implode( '_', $page_keys ) );
+
+		return $this->installed_flag . '_' . $unique_hash;
+	}
+
+	/**
+	 * Check if pages have been initialized
+	 *
+	 * @return bool
+	 */
+	protected function is_initialized(): bool {
+		$init_key = $this->get_initialization_key();
+
+		if ( $this->get_handler ) {
+			return (bool) call_user_func( $this->get_handler, $init_key );
+		}
+
+		return (bool) get_option( $this->get_option_key( $init_key ), false );
+	}
+
+	/**
+	 * Mark pages as initialized
+	 *
+	 * @return bool
+	 */
+	protected function mark_initialized(): bool {
+		$init_key = $this->get_initialization_key();
+
+		if ( $this->update_handler ) {
+			return (bool) call_user_func( $this->update_handler, $init_key, true );
+		}
+
+		return update_option( $this->get_option_key( $init_key ), true );
+	}
+
+	/**
+	 * Force installation by clearing the initialized flag
+	 *
+	 * @return self
+	 */
+	public function force_reinstall(): self {
+		$init_key = $this->get_initialization_key();
+
+		if ( $this->update_handler ) {
+			call_user_func( $this->update_handler, $init_key, false );
+		} else {
+			delete_option( $this->get_option_key( $init_key ) );
+		}
+
+		return $this;
 	}
 
 	/**
@@ -130,120 +177,23 @@ class Pages {
 	 */
 	public function add_pages( array $pages ): self {
 		foreach ( $pages as $key => $page ) {
-			$result = $this->add_page( $key, $page );
-			if ( is_wp_error( $result ) ) {
-				$this->log( sprintf( 'Failed to register page %s: %s', $key, $result->get_error_message() ) );
+			if ( ! $this->is_valid_key( $key ) ) {
+				$this->log( sprintf( 'Invalid page key: %s', $key ) );
+				continue;
 			}
-		}
 
-		return $this;
-	}
+			if ( ! $this->validate_page( $page ) ) {
+				$this->log( sprintf( 'Invalid page configuration for: %s', $key ) );
+				continue;
+			}
 
-	/**
-	 * Add a single page
-	 *
-	 * @param string $key  Unique identifier for the page
-	 * @param array  $page Page configuration
-	 *
-	 * @return true|WP_Error True on success, WP_Error on failure
-	 */
-	public function add_page( string $key, array $page ) {
-		if ( ! $this->is_valid_key( $key ) ) {
-			return new WP_Error(
-				'invalid_page_key',
-				sprintf( 'Invalid page key: %s. Keys must contain only lowercase letters, numbers, underscores, and hyphens.', $key )
+			$this->pages[ $key ] = wp_parse_args(
+				$this->prepare_page_attributes( $page ),
+				$this->get_default_attributes()
 			);
 		}
 
-		$result = $this->validate_page( $page );
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		$this->pages[ $key ] = wp_parse_args(
-			$this->prepare_page_attributes( $page ),
-			$this->get_default_attributes()
-		);
-
-		return true;
-	}
-
-	/**
-	 * Add a page template
-	 *
-	 * @param string $name     Template name
-	 * @param array  $template Template configuration
-	 *
-	 * @return self
-	 */
-	public function add_template( string $name, array $template ): self {
-		$this->templates[ $name ] = $template;
-
 		return $this;
-	}
-
-	/**
-	 * Create a page from a template
-	 *
-	 * @param string $key          Page identifier
-	 * @param string $template     Template name
-	 * @param array  $replacements Optional. Placeholder replacements
-	 *
-	 * @return true|WP_Error True on success, WP_Error on failure
-	 */
-	public function add_page_from_template( string $key, string $template, array $replacements = [] ) {
-		if ( ! isset( $this->templates[ $template ] ) ) {
-			return new WP_Error(
-				'template_not_found',
-				sprintf( 'Template %s not found', $template )
-			);
-		}
-
-		$page = $this->templates[ $template ];
-
-		foreach ( [ 'title', 'content' ] as $field ) {
-			if ( isset( $page[ $field ] ) ) {
-				$page[ $field ] = strtr( $page[ $field ], $replacements );
-			}
-		}
-
-		return $this->add_page( $key, $page );
-	}
-
-	/**
-	 * Check if pages are already installed
-	 *
-	 * @return bool
-	 */
-	protected function is_installed(): bool {
-		if ( $this->get_handler ) {
-			$installed = call_user_func( $this->get_handler, $this->install_key );
-			$version   = call_user_func( $this->get_handler, $this->version_key );
-
-			return $installed && version_compare( $version, self::VERSION, '>=' );
-		}
-
-		$installed = get_option( $this->get_option_key( $this->install_key ) );
-		$version   = get_option( $this->get_option_key( $this->version_key ) );
-
-		return $installed && version_compare( $version, self::VERSION, '>=' );
-	}
-
-	/**
-	 * Mark installation as complete
-	 *
-	 * @return bool
-	 */
-	protected function mark_as_installed(): bool {
-		if ( $this->update_handler ) {
-			$result1 = call_user_func( $this->update_handler, $this->install_key, true );
-			$result2 = call_user_func( $this->update_handler, $this->version_key, self::VERSION );
-
-			return $result1 && $result2;
-		}
-
-		return update_option( $this->get_option_key( $this->install_key ), true ) &&
-		       update_option( $this->get_option_key( $this->version_key ), self::VERSION );
 	}
 
 	/**
@@ -252,10 +202,14 @@ class Pages {
 	 * @return array Array of page IDs keyed by their identifiers
 	 */
 	public function install(): array {
-		// Check if already installed with current version
-		if ( $this->is_installed() ) {
+		// Quick check using initialization flag
+		if ( $this->is_initialized() ) {
+			$this->log( 'Pages already initialized, skipping installation' );
+
 			return $this->get_stored_pages();
 		}
+
+		$this->log( 'Starting page installation' );
 
 		$page_ids = [];
 		$stored   = $this->get_stored_pages();
@@ -270,70 +224,21 @@ class Pages {
 			}
 
 			// Create new page
+			$this->log( sprintf( 'Creating new page: %s', $key ) );
 			$new_page_id = wp_insert_post( $attributes );
+
 			if ( ! is_wp_error( $new_page_id ) ) {
 				$page_ids[ $key ] = $new_page_id;
-				$this->set_page_version( $new_page_id );
-				$this->store_page_config( $new_page_id, $attributes );
+				$this->log( sprintf( 'Created page: %s (ID: %d)', $key, $new_page_id ) );
 			}
 		}
 
 		if ( ! empty( $page_ids ) ) {
 			$this->save_page_ids( $page_ids );
-			$this->mark_as_installed();
+			$this->mark_initialized();
 		}
 
 		return $page_ids;
-	}
-
-	/**
-	 * Set the version for a page
-	 *
-	 * @param int $page_id Page ID
-	 *
-	 * @return bool True on success, false on failure
-	 */
-	protected function set_page_version( int $page_id ): bool {
-		$result = update_post_meta( $page_id, '_page_version', self::VERSION );
-
-		return $result !== false;
-	}
-
-	/**
-	 * Store page configuration
-	 *
-	 * @param int   $page_id    Page ID
-	 * @param array $attributes Page attributes
-	 *
-	 * @return bool True on success, false on failure
-	 */
-	protected function store_page_config( int $page_id, array $attributes ): bool {
-		$result = update_post_meta( $page_id, '_page_config', $attributes );
-
-		return $result !== false;
-	}
-
-	/**
-	 * Check if a page needs updating
-	 *
-	 * @param int    $page_id    Page ID
-	 * @param array  $attributes New page attributes
-	 * @param string $key        Page identifier
-	 *
-	 * @return void
-	 */
-	protected function maybe_update_page( int $page_id, array $attributes, string $key ): void {
-		$current_version = get_post_meta( $page_id, '_page_version', true );
-		if ( version_compare( $current_version, self::VERSION, '<' ) ) {
-			$attributes['ID'] = $page_id;
-			$result           = wp_update_post( $attributes );
-
-			if ( ! is_wp_error( $result ) ) {
-				$this->set_page_version( $page_id );
-				$this->store_page_config( $page_id, $attributes );
-				$this->log( sprintf( 'Updated page: %s', $key ) );
-			}
-		}
 	}
 
 	/**
@@ -347,7 +252,7 @@ class Pages {
 			foreach ( array_keys( $this->pages ) as $key ) {
 				$page_id = call_user_func( $this->get_handler, $key . '_page' );
 				if ( $page_id ) {
-					$pages[ $key ] = (int) $page_id;  // Cast to integer
+					$pages[ $key ] = (int) $page_id;
 				}
 			}
 
@@ -356,7 +261,6 @@ class Pages {
 
 		$stored = get_option( $this->get_option_key( 'pages' ), [] );
 
-		// Cast all stored IDs to integers
 		return array_map( 'intval', $stored );
 	}
 
@@ -368,7 +272,6 @@ class Pages {
 	 * @return bool True on success, false on failure
 	 */
 	protected function save_page_ids( array $page_ids ): bool {
-		// Ensure all IDs are integers before saving
 		$page_ids = array_map( 'intval', $page_ids );
 
 		if ( $this->update_handler ) {
@@ -377,7 +280,7 @@ class Pages {
 				$results[] = (bool) call_user_func(
 					$this->update_handler,
 					$key . '_page',
-					(int) $page_id  // Cast to integer
+					$page_id
 				);
 			}
 
@@ -388,6 +291,36 @@ class Pages {
 	}
 
 	/**
+	 * Check if a page needs updating
+	 *
+	 * @param int    $page_id    Page ID
+	 * @param array  $attributes New page attributes
+	 * @param string $key        Page identifier
+	 *
+	 * @return void
+	 */
+	protected function maybe_update_page( int $page_id, array $attributes, string $key ): void {
+		$post = get_post( $page_id );
+
+		if ( ! $post ) {
+			return;
+		}
+
+		$needs_update = $post->post_title !== $attributes['post_title'] ||
+		                $post->post_content !== $attributes['post_content'] ||
+		                $post->post_status !== $attributes['post_status'];
+
+		if ( $needs_update ) {
+			$attributes['ID'] = $page_id;
+			$result           = wp_update_post( $attributes );
+
+			if ( ! is_wp_error( $result ) ) {
+				$this->log( sprintf( 'Updated page: %s', $key ) );
+			}
+		}
+	}
+
+	/**
 	 * Get prefixed option key
 	 *
 	 * @param string $key Option key
@@ -395,7 +328,6 @@ class Pages {
 	 * @return string Option key (prefixed only if no custom handlers)
 	 */
 	protected function get_option_key( string $key ): string {
-		// Don't apply prefix if using custom handlers
 		if ( $this->get_handler || $this->update_handler ) {
 			return $key;
 		}
@@ -408,21 +340,10 @@ class Pages {
 	 *
 	 * @param array $page Page configuration
 	 *
-	 * @return true|WP_Error True if valid, WP_Error if invalid
+	 * @return bool Whether the page configuration is valid
 	 */
-	protected function validate_page( array $page ) {
-		$required = [ 'title', 'content' ];
-
-		foreach ( $required as $field ) {
-			if ( empty( $page[ $field ] ) ) {
-				return new WP_Error(
-					'missing_required_field',
-					sprintf( 'Missing required field: %s', $field )
-				);
-			}
-		}
-
-		return true;
+	protected function validate_page( array $page ): bool {
+		return ! empty( $page['title'] ) && ! empty( $page['content'] );
 	}
 
 	/**
@@ -502,6 +423,17 @@ class Pages {
 	}
 
 	/**
+	 * Enable debug mode
+	 *
+	 * @return self
+	 */
+	public function enable_debug(): self {
+		$this->debug = true;
+
+		return $this;
+	}
+
+	/**
 	 * Static helper method to create and install pages.
 	 *
 	 * @param array         $pages          Array of pages
@@ -511,7 +443,12 @@ class Pages {
 	 *
 	 * @return array Array of page IDs
 	 */
-	public static function register( array $pages, string $prefix = '', ?callable $update_handler = null, ?callable $get_handler = null ): array {
+	public static function register(
+		array $pages,
+		string $prefix = '',
+		?callable $update_handler = null,
+		?callable $get_handler = null
+	): array {
 		$instance = new self( $prefix, $get_handler, $update_handler );
 
 		return $instance->add_pages( $pages )->install();
@@ -526,7 +463,11 @@ class Pages {
 	 *
 	 * @return int|null Page ID if found, null otherwise
 	 */
-	public static function get_page_id( string $key, string $prefix = '', ?callable $get_handler = null ): ?int {
+	public static function get_page_id(
+		string $key,
+		string $prefix = '',
+		?callable $get_handler = null
+	): ?int {
 		if ( $get_handler ) {
 			$page_id = call_user_func( $get_handler, $key . '_page' );
 
@@ -550,10 +491,13 @@ class Pages {
 	 *
 	 * @return string|null Page URL if found, null otherwise
 	 */
-	public static function get_page_url( string $key, string $prefix = '', ?callable $get_handler = null ): ?string {
+	public static function get_page_url(
+		string $key,
+		string $prefix = '',
+		?callable $get_handler = null
+	): ?string {
 		$page_id = self::get_page_id( $key, $prefix, $get_handler );
 
 		return $page_id ? get_permalink( $page_id ) : null;
 	}
-
 }
