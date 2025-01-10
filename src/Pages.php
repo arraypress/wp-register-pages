@@ -22,14 +22,10 @@ namespace ArrayPress\WP\Register;
 // Exit if accessed directly
 defined( 'ABSPATH' ) || exit;
 
-use WP_Error;
 use WP_Post;
 
 /**
  * Class Pages
- *
- * @package ArrayPress\WP\Register
- * @since   1.0.0
  */
 class Pages {
 
@@ -115,10 +111,11 @@ class Pages {
 	 */
 	private function get_initialization_key(): string {
 		$page_keys = array_keys( $this->pages );
-		sort( $page_keys ); // Ensure consistent order
+		sort( $page_keys );
 		$unique_hash = md5( implode( '_', $page_keys ) );
+		$key         = $this->installed_flag . '_' . $unique_hash;
 
-		return $this->installed_flag . '_' . $unique_hash;
+		return $key;
 	}
 
 	/**
@@ -130,7 +127,21 @@ class Pages {
 		$init_key = $this->get_initialization_key();
 
 		if ( $this->get_handler ) {
-			return (bool) call_user_func( $this->get_handler, $init_key );
+			$result = call_user_func( $this->get_handler, $init_key );
+
+			// Add additional checks
+			$pages_exist = true;
+			foreach ( array_keys( $this->pages ) as $key ) {
+				$page_id     = call_user_func( $this->get_handler, $key . '_page' );
+				$post        = $page_id ? get_post( $page_id ) : null;
+				$pages_exist = $pages_exist && ( $post instanceof WP_Post );
+			}
+
+			if ( ! $pages_exist ) {
+				return false;
+			}
+
+			return true;
 		}
 
 		return (bool) get_option( $this->get_option_key( $init_key ), false );
@@ -202,14 +213,9 @@ class Pages {
 	 * @return array Array of page IDs keyed by their identifiers
 	 */
 	public function install(): array {
-		// Quick check using initialization flag
 		if ( $this->is_initialized() ) {
-			$this->log( 'Pages already initialized, skipping installation' );
-
 			return $this->get_stored_pages();
 		}
-
-		$this->log( 'Starting page installation' );
 
 		$page_ids = [];
 		$stored   = $this->get_stored_pages();
@@ -224,12 +230,10 @@ class Pages {
 			}
 
 			// Create new page
-			$this->log( sprintf( 'Creating new page: %s', $key ) );
 			$new_page_id = wp_insert_post( $attributes );
 
 			if ( ! is_wp_error( $new_page_id ) ) {
 				$page_ids[ $key ] = $new_page_id;
-				$this->log( sprintf( 'Created page: %s (ID: %d)', $key, $new_page_id ) );
 			}
 		}
 
@@ -312,11 +316,7 @@ class Pages {
 
 		if ( $needs_update ) {
 			$attributes['ID'] = $page_id;
-			$result           = wp_update_post( $attributes );
-
-			if ( ! is_wp_error( $result ) ) {
-				$this->log( sprintf( 'Updated page: %s', $key ) );
-			}
+			wp_update_post( $attributes );
 		}
 	}
 
@@ -500,4 +500,5 @@ class Pages {
 
 		return $page_id ? get_permalink( $page_id ) : null;
 	}
+
 }
