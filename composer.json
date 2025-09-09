@@ -1,10 +1,10 @@
 {
-  "name": "arraypress/wp-register-pages",
+  "name": "arraypress/wp-page-utils",
   "version": "1.0.0",
-  "description": "A streamlined WordPress page registration system with versioning, templates, and advanced features",
+  "description": "Dead simple page detection and registration for WordPress plugins",
   "type": "library",
   "license": "GPL-2.0-or-later",
-  "homepage": "https://github.com/arraypress/wp-register-pages/",
+  "homepage": "https://github.com/arraypress/wp-page-utils",
   "authors": [
     {
       "name": "David Sherlock",
@@ -16,10 +16,10 @@
   },
   "autoload": {
     "psr-4": {
-      "ArrayPress\\WP\\Register\\": "src/"
+      "ArrayPress\\PageUtils\\": "src/"
     },
     "files": [
-      "src/Utilities.php"
+      "src/Functions.php"
     ]
   },
   "config": {
@@ -30,22 +30,18 @@
   "minimum-stability": "dev",
   "prefer-stable": true,
   "support": {
-    "issues": "https://github.com/arraypress/wp-register-pages/issues",
-    "source": "https://github.com/arraypress/wp-register-pages"
+    "issues": "https://github.com/arraypress/wp-page-utils/issues",
+    "source": "https://github.com/arraypress/wp-page-utils"
   },
   "keywords": [
     "wordpress",
+    "wp",
     "pages",
-    "registration",
-    "templates",
-    "versioning",
-    "page-management",
-    "backup",
-    "restore",
-    "wp-admin",
-    "post-types",
-    "meta",
-    "relationships",
-    "hierarchy"
+    "page-detection",
+    "page-registration",
+    "shortcode",
+    "conditional-logic",
+    "settings",
+    "arraypress"
   ]
 }

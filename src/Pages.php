@@ -1,504 +1,389 @@
 <?php
 /**
- * WordPress Page Registration Manager
+ * WordPress Page Registration
  *
- * A simplified solution for managing WordPress pages with features like:
- * - Automatic page creation and verification
- * - Parent-child relationships
- * - Custom option storage support
- * - Error handling and logging
+ * Dead simple page registration for WordPress plugins.
+ * Creates pages on activation and stores their IDs.
  *
- * @package     ArrayPress\WP\Register
- * @copyright   Copyright (c) 2024, ArrayPress Limited
- * @license     GPL2+
- * @version     1.0.0
- * @author      David Sherlock
+ * @package ArrayPress\PageUtils
+ * @since   1.0.0
+ * @author  David Sherlock
+ * @license GPL-2.0-or-later
  */
 
 declare( strict_types=1 );
 
-namespace ArrayPress\WP\Register;
-
-// Exit if accessed directly
-defined( 'ABSPATH' ) || exit;
+namespace ArrayPress\PageUtils;
 
 use WP_Post;
 
 /**
- * Class Pages
+ * Register Class
+ *
+ * Simple page registration and management for WordPress plugins.
+ * Creates pages if they don't exist and stores their IDs.
+ *
+ * Usage:
+ * $register = new Register('myplugin');
+ * $register->add('checkout', 'Checkout', 'Place your order here');
+ * $register->install();
  */
-class Pages {
+class Register {
 
 	/**
-	 * Default page settings
-	 *
-	 * @var array
-	 */
-	protected const DEFAULTS = [
-		'status'         => 'publish',
-		'type'           => 'page',
-		'author'         => 0,
-		'comment_status' => 'closed',
-		'ping_status'    => 'closed',
-		'parent'         => 0,
-		'menu_order'     => 0,
-	];
-
-	/**
-	 * Collection of pages to be registered
+	 * Pages to register.
 	 *
 	 * @var array
 	 */
 	private array $pages = [];
 
 	/**
-	 * Option prefix for storing page data
+	 * Plugin prefix.
 	 *
 	 * @var string
 	 */
-	private string $option_prefix = '';
+	private string $prefix;
 
 	/**
-	 * Option get handler callback
+	 * Custom function to get options.
 	 *
 	 * @var callable|null
 	 */
-	private $get_handler = null;
+	private $get_option_callback;
 
 	/**
-	 * Option update handler callback
+	 * Custom function to update options.
 	 *
 	 * @var callable|null
 	 */
-	private $update_handler = null;
+	private $update_option_callback;
 
 	/**
-	 * Debug mode status
+	 * Constructor.
 	 *
-	 * @var bool
-	 */
-	private bool $debug = false;
-
-	/**
-	 * Base flag for initialization tracking
-	 *
-	 * @var string
-	 */
-	private string $installed_flag = 'pages_initialized';
-
-	/**
-	 * Constructor
-	 *
-	 * @param string        $prefix         Optional. Option prefix for storing page data
-	 * @param callable|null $get_handler    Optional. Custom handler for getting options
-	 * @param callable|null $update_handler Optional. Custom handler for updating options
+	 * @param string        $prefix                 Your plugin prefix.
+	 * @param callable|null $get_option_callback    Optional custom function to get options.
+	 * @param callable|null $update_option_callback Optional custom function to update options.
 	 */
 	public function __construct(
-		string $prefix = '',
-		?callable $get_handler = null,
-		?callable $update_handler = null
+		string $prefix,
+		?callable $get_option_callback = null,
+		?callable $update_option_callback = null
 	) {
-		$this->option_prefix  = $prefix;
-		$this->get_handler    = $get_handler;
-		$this->update_handler = $update_handler;
-		$this->debug          = defined( 'WP_DEBUG' ) && WP_DEBUG;
+		$this->prefix                 = $prefix;
+		$this->get_option_callback    = $get_option_callback;
+		$this->update_option_callback = $update_option_callback;
 	}
 
 	/**
-	 * Get unique initialization key based on registered pages
+	 * Add a page to register.
 	 *
-	 * @return string
+	 * @param string $key     Page key (e.g., 'checkout', 'account').
+	 * @param string $title   Page title.
+	 * @param string $content Page content (can include shortcodes).
+	 * @param int    $parent  Parent page ID (optional).
+	 *
+	 * @return void
 	 */
-	private function get_initialization_key(): string {
-		$page_keys = array_keys( $this->pages );
-		sort( $page_keys );
-		$unique_hash = md5( implode( '_', $page_keys ) );
-		$key         = $this->installed_flag . '_' . $unique_hash;
-
-		return $key;
+	public function add( string $key, string $title, string $content = '', int $parent = 0 ): void {
+		$this->pages[ $key ] = [
+			'title'   => $title,
+			'content' => $content,
+			'parent'  => $parent,
+		];
 	}
 
 	/**
-	 * Check if pages have been initialized
+	 * Add multiple pages at once.
 	 *
-	 * @return bool
+	 * @param array $pages Array of key => [title, content, parent].
+	 *
+	 * @return void
 	 */
-	protected function is_initialized(): bool {
-		$init_key = $this->get_initialization_key();
-
-		if ( $this->get_handler ) {
-			$result = call_user_func( $this->get_handler, $init_key );
-
-			// Add additional checks
-			$pages_exist = true;
-			foreach ( array_keys( $this->pages ) as $key ) {
-				$page_id     = call_user_func( $this->get_handler, $key . '_page' );
-				$post        = $page_id ? get_post( $page_id ) : null;
-				$pages_exist = $pages_exist && ( $post instanceof WP_Post );
-			}
-
-			if ( ! $pages_exist ) {
-				return false;
-			}
-
-			return true;
-		}
-
-		return (bool) get_option( $this->get_option_key( $init_key ), false );
-	}
-
-	/**
-	 * Mark pages as initialized
-	 *
-	 * @return bool
-	 */
-	protected function mark_initialized(): bool {
-		$init_key = $this->get_initialization_key();
-
-		if ( $this->update_handler ) {
-			return (bool) call_user_func( $this->update_handler, $init_key, true );
-		}
-
-		return update_option( $this->get_option_key( $init_key ), true );
-	}
-
-	/**
-	 * Force installation by clearing the initialized flag
-	 *
-	 * @return self
-	 */
-	public function force_reinstall(): self {
-		$init_key = $this->get_initialization_key();
-
-		if ( $this->update_handler ) {
-			call_user_func( $this->update_handler, $init_key, false );
-		} else {
-			delete_option( $this->get_option_key( $init_key ) );
-		}
-
-		return $this;
-	}
-
-	/**
-	 * Register multiple pages
-	 *
-	 * @param array $pages Array of pages to register
-	 *
-	 * @return self
-	 */
-	public function add_pages( array $pages ): self {
+	public function add_multiple( array $pages ): void {
 		foreach ( $pages as $key => $page ) {
-			if ( ! $this->is_valid_key( $key ) ) {
-				$this->log( sprintf( 'Invalid page key: %s', $key ) );
-				continue;
-			}
-
-			if ( ! $this->validate_page( $page ) ) {
-				$this->log( sprintf( 'Invalid page configuration for: %s', $key ) );
-				continue;
-			}
-
-			$this->pages[ $key ] = wp_parse_args(
-				$this->prepare_page_attributes( $page ),
-				$this->get_default_attributes()
+			$this->add(
+				$key,
+				$page['title'] ?? '',
+				$page['content'] ?? '',
+				$page['parent'] ?? 0
 			);
 		}
-
-		return $this;
 	}
 
 	/**
-	 * Install registered pages
+	 * Install/create the registered pages.
 	 *
-	 * @return array Array of page IDs keyed by their identifiers
+	 * @param bool $show_post_states Whether to show post states in admin.
+	 *
+	 * @return array Array of page IDs keyed by page key.
 	 */
-	public function install(): array {
-		if ( $this->is_initialized() ) {
-			return $this->get_stored_pages();
-		}
-
+	public function install( bool $show_post_states = true ): array {
 		$page_ids = [];
-		$stored   = $this->get_stored_pages();
 
-		foreach ( $this->pages as $key => $attributes ) {
-			// Check if page already exists
-			$page_id = $stored[ $key ] ?? null;
-			if ( $page_id && get_post( $page_id ) instanceof WP_Post ) {
-				$page_ids[ $key ] = $page_id;
-				$this->maybe_update_page( $page_id, $attributes, $key );
+		foreach ( $this->pages as $key => $page ) {
+			// Get existing page ID
+			$existing_id = $this->get_stored_page_id( $key );
+
+			// Check if page still exists
+			if ( $existing_id && get_post( $existing_id ) ) {
+				$page_ids[ $key ] = $existing_id;
 				continue;
 			}
 
-			// Create new page
-			$new_page_id = wp_insert_post( $attributes );
+			// Create the page
+			$page_id = $this->create_page( $page );
 
-			if ( ! is_wp_error( $new_page_id ) ) {
-				$page_ids[ $key ] = $new_page_id;
+			if ( $page_id ) {
+				$page_ids[ $key ] = $page_id;
+				$this->store_page_id( $key, $page_id, $page['title'] );
 			}
 		}
 
-		if ( ! empty( $page_ids ) ) {
-			$this->save_page_ids( $page_ids );
-			$this->mark_initialized();
+		// Setup post states display
+		if ( $show_post_states && ! empty( $page_ids ) ) {
+			$this->setup_post_states();
 		}
 
 		return $page_ids;
 	}
 
 	/**
-	 * Get stored page IDs
+	 * Create a single page.
 	 *
-	 * @return array Array of stored page IDs
+	 * @param array $page Page configuration.
+	 *
+	 * @return int|null Page ID or null on failure.
 	 */
-	protected function get_stored_pages(): array {
-		if ( $this->get_handler ) {
-			$pages = [];
-			foreach ( array_keys( $this->pages ) as $key ) {
-				$page_id = call_user_func( $this->get_handler, $key . '_page' );
-				if ( $page_id ) {
-					$pages[ $key ] = (int) $page_id;
-				}
-			}
-
-			return $pages;
-		}
-
-		$stored = get_option( $this->get_option_key( 'pages' ), [] );
-
-		return array_map( 'intval', $stored );
-	}
-
-	/**
-	 * Save page IDs
-	 *
-	 * @param array $page_ids Array of page IDs
-	 *
-	 * @return bool True on success, false on failure
-	 */
-	protected function save_page_ids( array $page_ids ): bool {
-		$page_ids = array_map( 'intval', $page_ids );
-
-		if ( $this->update_handler ) {
-			$results = [];
-			foreach ( $page_ids as $key => $page_id ) {
-				$results[] = (bool) call_user_func(
-					$this->update_handler,
-					$key . '_page',
-					$page_id
-				);
-			}
-
-			return ! in_array( false, $results, true );
-		}
-
-		return update_option( $this->get_option_key( 'pages' ), $page_ids );
-	}
-
-	/**
-	 * Check if a page needs updating
-	 *
-	 * @param int    $page_id    Page ID
-	 * @param array  $attributes New page attributes
-	 * @param string $key        Page identifier
-	 *
-	 * @return void
-	 */
-	protected function maybe_update_page( int $page_id, array $attributes, string $key ): void {
-		$post = get_post( $page_id );
-
-		if ( ! $post ) {
-			return;
-		}
-
-		$needs_update = $post->post_title !== $attributes['post_title'] ||
-		                $post->post_content !== $attributes['post_content'] ||
-		                $post->post_status !== $attributes['post_status'];
-
-		if ( $needs_update ) {
-			$attributes['ID'] = $page_id;
-			wp_update_post( $attributes );
-		}
-	}
-
-	/**
-	 * Get prefixed option key
-	 *
-	 * @param string $key Option key
-	 *
-	 * @return string Option key (prefixed only if no custom handlers)
-	 */
-	protected function get_option_key( string $key ): string {
-		if ( $this->get_handler || $this->update_handler ) {
-			return $key;
-		}
-
-		return empty( $this->option_prefix ) ? $key : "{$this->option_prefix}_{$key}";
-	}
-
-	/**
-	 * Validate page configuration
-	 *
-	 * @param array $page Page configuration
-	 *
-	 * @return bool Whether the page configuration is valid
-	 */
-	protected function validate_page( array $page ): bool {
-		return ! empty( $page['title'] ) && ! empty( $page['content'] );
-	}
-
-	/**
-	 * Prepare page attributes for WordPress
-	 *
-	 * @param array $page Page configuration
-	 *
-	 * @return array Prepared attributes
-	 */
-	protected function prepare_page_attributes( array $page ): array {
-		$mapping = [
-			'title'      => 'post_title',
-			'content'    => 'post_content',
-			'parent'     => 'post_parent',
-			'status'     => 'post_status',
-			'type'       => 'post_type',
-			'author'     => 'post_author',
-			'menu_order' => 'menu_order',
+	private function create_page( array $page ): ?int {
+		$args = [
+			'post_title'     => $page['title'],
+			'post_content'   => $page['content'],
+			'post_status'    => 'publish',
+			'post_type'      => 'page',
+			'post_parent'    => $page['parent'],
+			'comment_status' => 'closed',
+			'ping_status'    => 'closed',
 		];
 
-		$prepared = [];
-		foreach ( $page as $key => $value ) {
-			$wp_key              = $mapping[ $key ] ?? $key;
-			$prepared[ $wp_key ] = $value;
+		$page_id = wp_insert_post( $args );
+
+		return is_wp_error( $page_id ) ? null : $page_id;
+	}
+
+	/**
+	 * Get a stored page ID.
+	 *
+	 * @param string $key Page key.
+	 *
+	 * @return int|null Page ID or null if not found.
+	 */
+	private function get_stored_page_id( string $key ): ?int {
+		$option_key = $this->prefix . '_' . $key . '_page';
+
+		if ( $this->get_option_callback ) {
+			$value = call_user_func( $this->get_option_callback, $option_key );
+
+			// Handle both formats: just ID or ['value' => ID, 'label' => Title]
+			if ( is_array( $value ) && isset( $value['value'] ) ) {
+				return (int) $value['value'];
+			}
+
+			return $value ? (int) $value : null;
 		}
 
-		return $prepared;
-	}
+		$value = get_option( $option_key );
 
-	/**
-	 * Get default page attributes
-	 *
-	 * @return array Default attributes
-	 */
-	protected function get_default_attributes(): array {
-		$defaults = self::DEFAULTS;
-
-		if ( empty( $defaults['author'] ) ) {
-			$defaults['author'] = get_current_user_id();
+		// Handle both formats
+		if ( is_array( $value ) && isset( $value['value'] ) ) {
+			return (int) $value['value'];
 		}
 
-		return array_combine(
-			array_map( fn( $key ) => "post_{$key}", array_keys( $defaults ) ),
-			array_values( $defaults )
-		);
+		return $value ? (int) $value : null;
 	}
 
 	/**
-	 * Validate a page key
+	 * Store a page ID.
 	 *
-	 * @param string $key Page identifier
+	 * @param string $key   Page key.
+	 * @param int    $id    Page ID.
+	 * @param string $title Page title.
 	 *
-	 * @return bool Whether the key is valid
+	 * @return bool True on success.
 	 */
-	protected function is_valid_key( string $key ): bool {
-		return (bool) preg_match( '/^[a-z0-9_-]+$/', $key );
+	private function store_page_id( string $key, int $id, string $title ): bool {
+		$option_key = $this->prefix . '_' . $key . '_page';
+
+		// Store as array format for settings manager compatibility
+		$value = [
+			'value' => $id,
+			'label' => $title
+		];
+
+		if ( $this->update_option_callback ) {
+			return (bool) call_user_func( $this->update_option_callback, $option_key, $value );
+		}
+
+		return update_option( $option_key, $value );
 	}
 
 	/**
-	 * Log a message if debugging is enabled
+	 * Get all registered page IDs.
 	 *
-	 * @param string $message Message to log
-	 * @param array  $context Optional. Additional context
+	 * @return array Array of page IDs keyed by page key.
+	 */
+	public function get_page_ids(): array {
+		$page_ids = [];
+
+		foreach ( array_keys( $this->pages ) as $key ) {
+			$id = $this->get_stored_page_id( $key );
+			if ( $id ) {
+				$page_ids[ $key ] = $id;
+			}
+		}
+
+		return $page_ids;
+	}
+
+	/**
+	 * Get a single page ID.
+	 *
+	 * @param string $key Page key.
+	 *
+	 * @return int|null Page ID or null if not found.
+	 */
+	public function get_page_id( string $key ): ?int {
+		return $this->get_stored_page_id( $key );
+	}
+
+	/**
+	 * Get a page URL.
+	 *
+	 * @param string $key Page key.
+	 *
+	 * @return string|null Page URL or null if not found.
+	 */
+	public function get_page_url( string $key ): ?string {
+		$page_id = $this->get_stored_page_id( $key );
+
+		if ( ! $page_id ) {
+			return null;
+		}
+
+		$url = get_permalink( $page_id );
+
+		return $url ?: null;
+	}
+
+	/**
+	 * Check if a page exists.
+	 *
+	 * @param string $key Page key.
+	 *
+	 * @return bool True if page exists.
+	 */
+	public function page_exists( string $key ): bool {
+		$page_id = $this->get_stored_page_id( $key );
+
+		return $page_id && get_post( $page_id );
+	}
+
+	/**
+	 * Delete a page.
+	 *
+	 * @param string $key          Page key.
+	 * @param bool   $force_delete Whether to bypass trash.
+	 *
+	 * @return bool True on success.
+	 */
+	public function delete_page( string $key, bool $force_delete = false ): bool {
+		$page_id = $this->get_stored_page_id( $key );
+
+		if ( ! $page_id ) {
+			return false;
+		}
+
+		$deleted = wp_delete_post( $page_id, $force_delete );
+
+		if ( $deleted ) {
+			// Clear the stored option
+			$option_key = $this->prefix . '_' . $key . '_page';
+
+			if ( $this->update_option_callback ) {
+				call_user_func( $this->update_option_callback, $option_key, null );
+			} else {
+				delete_option( $option_key );
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Static helper to quickly register pages.
+	 *
+	 * @param array         $pages                  Array of pages to register.
+	 * @param string        $prefix                 Plugin prefix.
+	 * @param callable|null $get_option_callback    Optional custom function to get options.
+	 * @param callable|null $update_option_callback Optional custom function to update options.
+	 * @param bool          $show_post_states       Whether to show post states in admin.
+	 *
+	 * @return array Array of page IDs.
+	 */
+	public static function quick_install(
+		array $pages,
+		string $prefix,
+		?callable $get_option_callback = null,
+		?callable $update_option_callback = null,
+		bool $show_post_states = true
+	): array {
+		$register = new self( $prefix, $get_option_callback, $update_option_callback );
+		$register->add_multiple( $pages );
+
+		return $register->install( $show_post_states );
+	}
+
+	/**
+	 * Setup post states display in admin.
 	 *
 	 * @return void
 	 */
-	protected function log( string $message, array $context = [] ): void {
-		if ( $this->debug ) {
-			$prefix = $this->option_prefix ? "[{$this->option_prefix}] " : '';
-			error_log( sprintf(
-				'%sPages: %s %s',
-				$prefix,
-				$message,
-				$context ? json_encode( $context ) : ''
-			) );
-		}
+	private function setup_post_states(): void {
+		add_filter( 'display_post_states', [ $this, 'display_post_states' ], 10, 2 );
 	}
 
 	/**
-	 * Enable debug mode
+	 * Display post states in the admin pages list.
 	 *
-	 * @return self
+	 * @param array    $post_states Current post states.
+	 * @param WP_Post $post        Current post object.
+	 *
+	 * @return array Modified post states.
 	 */
-	public function enable_debug(): self {
-		$this->debug = true;
+	public function display_post_states( array $post_states, WP_Post $post ): array {
+		foreach ( $this->pages as $key => $page ) {
+			$stored_id = $this->get_stored_page_id( $key );
 
-		return $this;
-	}
+			if ( $stored_id && $stored_id === $post->ID ) {
+				// Format the label nicely
+				$label = $page['title'];
 
-	/**
-	 * Static helper method to create and install pages.
-	 *
-	 * @param array         $pages          Array of pages
-	 * @param string        $prefix         Optional. Option prefix for storing page data
-	 * @param callable|null $update_handler Optional. Custom handler for updating options
-	 * @param callable|null $get_handler    Optional. Custom handler for getting options
-	 *
-	 * @return array Array of page IDs
-	 */
-	public static function register(
-		array $pages,
-		string $prefix = '',
-		?callable $update_handler = null,
-		?callable $get_handler = null
-	): array {
-		$instance = new self( $prefix, $get_handler, $update_handler );
-
-		return $instance->add_pages( $pages )->install();
-	}
-
-	/**
-	 * Static helper method to get a page ID by its key
-	 *
-	 * @param string        $key         Page key
-	 * @param string        $prefix      Optional. Option prefix used during registration
-	 * @param callable|null $get_handler Optional. Custom handler for getting options
-	 *
-	 * @return int|null Page ID if found, null otherwise
-	 */
-	public static function get_page_id(
-		string $key,
-		string $prefix = '',
-		?callable $get_handler = null
-	): ?int {
-		if ( $get_handler ) {
-			$page_id = call_user_func( $get_handler, $key . '_page' );
-
-			return $page_id ? (int) $page_id : null;
+				// Add prefix context if it makes sense
+				if ( $this->prefix ) {
+					$plugin_name                               = ucwords( str_replace( [
+						'_',
+						'-'
+					], ' ', $this->prefix ) );
+					$post_states[ $this->prefix . '_' . $key ] = sprintf( '%s — %s', $plugin_name, $label );
+				} else {
+					$post_states[ $key ] = $label;
+				}
+			}
 		}
 
-		$stored = get_option(
-			empty( $prefix ) ? 'pages' : "{$prefix}_pages",
-			[]
-		);
-
-		return isset( $stored[ $key ] ) ? (int) $stored[ $key ] : null;
-	}
-
-	/**
-	 * Static helper method to get a page URL by its key
-	 *
-	 * @param string        $key         Page key
-	 * @param string        $prefix      Optional. Option prefix used during registration
-	 * @param callable|null $get_handler Optional. Custom handler for getting options
-	 *
-	 * @return string|null Page URL if found, null otherwise
-	 */
-	public static function get_page_url(
-		string $key,
-		string $prefix = '',
-		?callable $get_handler = null
-	): ?string {
-		$page_id = self::get_page_id( $key, $prefix, $get_handler );
-
-		return $page_id ? get_permalink( $page_id ) : null;
+		return $post_states;
 	}
 
 }
