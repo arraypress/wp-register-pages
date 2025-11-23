@@ -13,7 +13,7 @@
 
 declare( strict_types=1 );
 
-namespace ArrayPress\PageUtils;
+namespace ArrayPress\RegisterPages;
 
 use WP_Post;
 

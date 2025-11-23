@@ -12,7 +12,7 @@
 
 declare( strict_types=1 );
 
-use ArrayPress\PageUtils\Register;
+use ArrayPress\RegisterPages\Register;
 
 if ( ! function_exists( 'register_custom_pages' ) ):
 	/**
