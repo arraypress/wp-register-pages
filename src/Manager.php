@@ -18,17 +18,17 @@ namespace ArrayPress\RegisterPages;
 use WP_Post;
 
 /**
- * Register Class
+ * Manager Class
  *
  * Simple page registration and management for WordPress plugins.
  * Creates pages if they don't exist and stores their IDs.
  *
  * Usage:
- * $register = new Register('myplugin');
+ * $register = new Manager('myplugin');
  * $register->add('checkout', 'Checkout', 'Place your order here');
  * $register->install();
  */
-class Register {
+class Manager {
 
 	/**
 	 * Pages to register.
@@ -357,7 +357,7 @@ class Register {
 	/**
 	 * Display post states in the admin pages list.
 	 *
-	 * @param array    $post_states Current post states.
+	 * @param array   $post_states Current post states.
 	 * @param WP_Post $post        Current post object.
 	 *
 	 * @return array Modified post states.

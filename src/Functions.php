@@ -12,7 +12,7 @@
 
 declare( strict_types=1 );
 
-use ArrayPress\RegisterPages\Register;
+use ArrayPress\RegisterPages\Manager;
 
 if ( ! function_exists( 'register_custom_pages' ) ):
 	/**
@@ -62,6 +62,6 @@ if ( ! function_exists( 'register_custom_pages' ) ):
 		?callable $update_option_callback = null,
 		bool $show_post_states = true
 	): array {
-		return Register::quick_install( $pages, $prefix, $get_option_callback, $update_option_callback, $show_post_states );
+		return Manager::quick_install( $pages, $prefix, $get_option_callback, $update_option_callback, $show_post_states );
 	}
 endif;
