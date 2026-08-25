@@ -1,5 +1,5 @@
 {
-    "name": "arraypress/wp-page-utils",
+    "name": "arraypress/wp-register-pages",
     "description": "Create the pages a plugin needs on activation, remember their IDs, and label them in the admin list.",
     "type": "library",
     "license": "GPL-2.0-or-later",
