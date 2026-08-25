@@ -1,243 +1,102 @@
-# WordPress Page Registration
+# Register Pages
 
-Dead simple page registration for WordPress plugins. Creates pages on activation, stores their IDs in a format compatible with settings managers, and shows post states in the admin.
+Create the pages a plugin needs on activation, remember their IDs, and label
+them in the admin list.
 
 ## Install
 
 ```bash
-composer require arraypress/wp-page-utils
+composer require arraypress/wp-register-pages
 ```
 
-## Basic Usage
+Requires PHP 8.3.
+
+## Use
 
 ```php
-use ArrayPress\PageUtils\Register;
-
-// Create registrar
-$register = new Register('myplugin');
-
-// Add pages
-$register->add('checkout', 'Checkout', '[myplugin_checkout]');
-$register->add('account', 'My Account', '[myplugin_account]');
-$register->add('success', 'Order Complete', 'Thank you for your order!');
-
-// Create the pages (post states are enabled by default)
-$page_ids = $register->install();
-
-// Now in WordPress admin, you'll see:
-// Pages list: "Checkout — Myplugin Checkout"
-// Pages list: "My Account — Myplugin Account"
+add_action( 'init', function () {
+	register_pages( 'myplugin', [
+		'checkout' => [
+			'title' => __( 'Checkout', 'my-plugin' ),
+			'slug'  => 'checkout',
+		],
+		'receipt'  => [
+			'title'   => __( 'Order receipt', 'my-plugin' ),
+			'content' => '[myplugin_receipt]',
+		],
+	] );
+} );
 ```
 
-## Post States Feature
+Safe to call on every request: a page whose id is stored and still exists is
+left alone.
 
-When you register pages, they automatically show up with labels in the WordPress admin pages list:
+Then, wherever you need it:
 
 ```php
-// Your pages will show in admin like:
-// ✓ Checkout     — MyPlugin Checkout
-// ✓ My Account   — MyPlugin Account  
-// ✓ Thank You    — MyPlugin Success
-
-// Disable post states if you don't want them
-$register->install(false); // Pass false to disable
-
-// Or with quick install
-Register::quick_install($pages, 'myplugin', null, null, false);
+$url = get_registered_page_url( 'checkout' );
+$id  = get_registered_page_id( 'checkout' );
 ```
 
-## With Settings Manager
+Both return null when the page is gone, so a missing page is something your
+code can notice rather than a link to nowhere.
 
-The library stores page IDs in a format compatible with your settings manager:
+### Options
+
+| Option    | Type   | What it does                                            |
+| --------- | ------ | ------------------------------------------------------- |
+| `title`   | string | The page title.                                          |
+| `content` | string | Its content. A shortcode, usually.                       |
+| `slug`    | string | The URL. Taken from the title if omitted.                |
+| `parent`  | int    | A parent page id.                                        |
+| `status`  | string | `publish` by default.                                    |
+| `label`   | string | What the admin list calls it. The title if omitted.      |
+
+Either a title or content is required — WordPress refuses to create a post
+with neither, and this reports that rather than storing an id it never got.
+
+## What it gets right
+
+Three things every plugin doing this by hand gets wrong at least once.
+
+**Remembering.** The id is stored, so the next activation does not make a
+second checkout page and leave the first one a mystery.
+
+**Checking.** `get_post()` returns a post object for a page in the trash, so a
+plugin that only checks existence carries on linking its customers at a page
+nobody can reach. Trashed counts as gone here, and so does an id that now
+belongs to something that is not a page — ids get reused after a database
+restore.
+
+**Saying so.** The pages are labelled on the pages list. Without that the
+admin has several pages they dare not touch and nothing to tell them why. It
+is two lines of code and it is the difference between a plugin that explains
+itself and one that does not.
+
+## Uninstall
 
 ```php
-use ArrayPress\PageUtils\Register;
-use ArrayPress\SettingsUtils\Manager;
-
-class MyPlugin {
-    private Manager $settings;
-    private Register $register;
-    
-    public function __construct() {
-        $this->settings = new Manager('myplugin_settings');
-        
-        // Pass your settings callbacks
-        $this->register = new Register(
-            'myplugin',
-            fn($key, $default = null) => $this->settings->get($key, $default),
-            fn($key, $value) => $this->settings->update($key, $value)
-        );
-    }
-    
-    public function activate() {
-        // Register pages on plugin activation
-        $this->register->add_multiple([
-            'checkout' => [
-                'title'   => 'Checkout',
-                'content' => '[myplugin_checkout]'
-            ],
-            'account' => [
-                'title'   => 'My Account', 
-                'content' => '[myplugin_account]'
-            ],
-            'success' => [
-                'title'   => 'Thank You',
-                'content' => 'Your order has been received!'
-            ]
-        ]);
-        
-        $this->register->install();
-    }
-}
+unregister_page( 'checkout' );        // forget it
+unregister_page( 'checkout', true );  // forget it and bin the page
 ```
 
-## Storage Format
+Forgetting does not delete by default. A page holds content somebody may have
+edited, and a plugin deleting it on the way out destroys work it did not
+create.
 
-Pages are stored in a format compatible with settings managers and select fields:
+## Upgrading from 1.x
 
-```php
-// Stored as:
-[
-    'value' => 123,        // Page ID
-    'label' => 'Checkout'  // Page title
-]
+The API is smaller: `register_pages( $prefix, $pages )` rather than five
+positional arguments and a pair of option callbacks.
 
-// This works perfectly with select fields in settings:
-$settings->get('checkout_page'); // Returns 123 (the ID)
+Ids stored by 1.x as `[ 'value' => id, 'label' => title ]` are still read, so
+an upgrade does not make every install create its pages again. New ids are
+stored as plain integers.
+
+## Testing
+
+```bash
+composer test          # phpunit
+composer lint          # phpcs, defect sniffs
+composer format:check  # phpcs, formatting
 ```
-
-## Complete Example with Page Utils
-
-Using both Register and Pages (detection) together:
-
-```php
-use ArrayPress\PageUtils\Register;
-use ArrayPress\PageUtils\Pages;
-use ArrayPress\SettingsUtils\Manager;
-
-class MyShop {
-    private Manager $settings;
-    private Register $register;
-    private Pages $pages;
-    
-    public function __construct() {
-        // Settings manager
-        $this->settings = new Manager('myshop_settings');
-        
-        // Page registration (for activation)
-        $this->register = new Register(
-            'myshop',
-            fn($key, $default = null) => $this->settings->get($key, $default),
-            fn($key, $value) => $this->settings->update($key, $value)
-        );
-        
-        // Page detection (for runtime)
-        $this->pages = new Pages(
-            'myshop',
-            fn($key, $default = null) => $this->settings->get($key, $default)
-        );
-        
-        // Setup page detection
-        $this->pages->add('checkout', 'checkout_page', ['myshop_checkout'], [], true);
-        $this->pages->add('account', 'account_page', ['myshop_account'], [], true);
-        $this->pages->add('success', 'success_page', ['myshop_success'], [], true);
-    }
-    
-    public function activate() {
-        // Create pages on activation
-        $this->register->add('checkout', 'Checkout', '[myshop_checkout]');
-        $this->register->add('account', 'My Account', '[myshop_account]');
-        $this->register->add('success', 'Order Complete', 'Thank you!');
-        
-        $this->register->install();
-    }
-    
-    public function init() {
-        // Use page detection at runtime
-        if ($this->pages->is('checkout')) {
-            // Load checkout scripts
-        }
-        
-        // Get URLs
-        $checkout_url = $this->pages->get_url('checkout');
-    }
-}
-```
-
-## All Methods
-
-```php
-// Add a single page
-$register->add('key', 'Page Title', 'Page content', $parent_id);
-
-// Add multiple pages
-$register->add_multiple([
-    'checkout' => ['title' => 'Checkout', 'content' => '[shortcode]'],
-    'account'  => ['title' => 'Account', 'content' => '[shortcode]']
-]);
-
-// Install/create pages
-$page_ids = $register->install();
-
-// Get a page ID
-$id = $register->get_page_id('checkout');
-
-// Get a page URL
-$url = $register->get_page_url('checkout');
-
-// Check if page exists
-if ($register->page_exists('checkout')) {
-    // Page exists
-}
-
-// Delete a page
-$register->delete_page('checkout', true); // true = skip trash
-
-// Get all page IDs
-$all_ids = $register->get_page_ids();
-
-// Quick one-liner
-$ids = Register::quick_install($pages, 'myplugin', $get_callback, $update_callback);
-```
-
-## Default WordPress Options
-
-If you don't use a custom settings manager, it works with standard WordPress options:
-
-```php
-// Without callbacks - uses get_option/update_option
-$register = new Register('myplugin');
-$register->add('checkout', 'Checkout', '[checkout_form]');
-$register->install();
-
-// Stores as: myplugin_checkout_page => ['value' => 123, 'label' => 'Checkout']
-```
-
-## Real World Usage
-
-```php
-// In your main plugin file
-register_activation_hook(__FILE__, function() {
-    $pages = [
-        'shop'     => ['title' => 'Shop',     'content' => '[product_grid]'],
-        'cart'     => ['title' => 'Cart',     'content' => '[shopping_cart]'],
-        'checkout' => ['title' => 'Checkout', 'content' => '[checkout_form]'],
-        'account'  => ['title' => 'Account',  'content' => '[user_account]'],
-        'success'  => ['title' => 'Success',  'content' => 'Order complete!']
-    ];
-    
-    Register::quick_install($pages, 'myshop');
-});
-```
-
-## Key Features
-
-- **Simple API** - Just `add()` and `install()`
-- **Settings Manager Compatible** - Stores as `['value' => id, 'label' => title]`
-- **Works with Page Utils** - Same prefix system for seamless integration
-- **Custom Storage** - Use your own get/update callbacks
-- **No Over-Engineering** - No MD5 hashes, no complex tracking, just simple page creation
-
-## License
-
-GPL-2.0-or-later
