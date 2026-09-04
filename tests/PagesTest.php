@@ -227,4 +227,26 @@ final class PagesTest extends TestCase {
 	public function test_the_url_of_a_missing_page_is_null(): void {
 		$this->assertNull( Pages::url( 'never_made' ) );
 	}
+	/**
+	 * The label on the pages list is escaped.
+	 *
+	 * Core prints post states as they are given, and a title is whatever
+	 * the plugin's configuration held.
+	 */
+	public function test_a_state_label_is_escaped(): void {
+		$id = Pages::add( 'checkout', [ 'title' => 'Checkout <b>now</b>' ] );
+
+		$states = Pages::post_states( [], $GLOBALS['pages_posts'][ $id ] );
+
+		$this->assertSame( 'Checkout &lt;b&gt;now&lt;/b&gt;', reset( $states ) );
+	}
+
+	/**
+	 * A label of its own wins over the title.
+	 */
+	public function test_a_label_is_preferred_to_the_title(): void {
+		$id = Pages::add( 'checkout', [ 'title' => 'Complete your purchase', 'label' => 'Checkout' ] );
+
+		$this->assertContains( 'Checkout', Pages::post_states( [], $GLOBALS['pages_posts'][ $id ] ) );
+	}
 }

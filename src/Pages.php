@@ -178,7 +178,15 @@ final class Pages {
 	public static function url( string $key ): ?string {
 		$id = self::id( $key );
 
-		return null === $id ? null : (string) get_permalink( $id );
+		if ( null === $id ) {
+			return null;
+		}
+
+		// get_permalink() answers false when it cannot; cast, that was an
+		// empty string, which is a link to the site root rather than no link.
+		$url = get_permalink( $id );
+
+		return is_string( $url ) && '' !== $url ? $url : null;
 	}
 
 	/**
@@ -241,7 +249,8 @@ final class Pages {
 
 		foreach ( self::$pages as $key => $config ) {
 			if ( self::id( $key ) === $post->ID ) {
-				$states[ self::$prefix . '_' . $key ] = (string) ( $config['label'] ?? $config['title'] );
+				// Core prints post states as they are given.
+				$states[ self::$prefix . '_' . $key ] = esc_html( (string) ( $config['label'] ?? $config['title'] ) );
 			}
 		}
 
